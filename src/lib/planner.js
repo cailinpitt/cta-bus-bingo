@@ -33,7 +33,12 @@ import { stopsNear } from './spatial.js';
 const MAX_WALK_FT = 2640; // 0.5 mi — boarding/alighting walk radius
 const TRANSFER_FT = 660; // 1/8 mi — stops "share a transfer point" within this radius
 const ROUND_TRIP_FT = 3960; // 0.75 mi — last alight must end within this of start (wider when trains allowed)
-const END_NEAR_FT = 1056; // 0.2 mi — chain is "at the destination" within this radius
+// 0.75 mi — matches "a 12-15 minute walk closes the gap." Off-grid
+// destinations (mid-block, on a side street far from any single bus route)
+// often have a closest-possible bus drop-off of 0.5-0.7 mi. The bridge
+// phase keeps pushing toward `end`, so this is a generous *upper* bound
+// on "reached"; the bridge stops early only when it's actually within.
+const END_NEAR_FT = 3960;
 // Bias the last unridden leg's score by distance-to-end so the chain trends
 // toward the destination; the post-chain bridge fills any remaining gap.
 const END_BIAS_PENALTY_PER_FT = 0.00015;
@@ -41,6 +46,7 @@ const END_BIAS_PENALTY_PER_FT = 0.00015;
 // (train / already-ridden bus) hops to reduce distance to the destination.
 const MAX_BRIDGE_HOPS = 5;
 const MAX_BRIDGE_RIDE_FT = 5280 * 15; // 15-mile cap per bridge hop (L trains)
+const MIN_BRIDGE_RIDE_FT = 5280; // 1 mi — don't board a bus for a sub-mile bridge hop
 const BRIDGE_TIME_PENALTY_PER_SEC = 3.28; // ft of progress required per sec of travel
 const MIN_RIDE_FT = 5280; // 1 mile — hard floor on unridden leg length
 const BACKTRACK_FT = 1000; // alight must be at least this far from a prior leg stop
@@ -188,7 +194,11 @@ function legTimeSeconds({ pattern, boardIdx, alightIdx }, gtfs, now) {
   const rideFt = Math.max(0, alight.pdist - board.pdist);
   const minPerFt = minutesPerFoot(gtfs, pattern, now);
   const rideMin = rideFt * minPerFt;
-  const headwayMin = headwayMinutes(gtfs, now) ?? 15;
+  // Fallback headway when GTFS lacks data for this hour. 8 min is the rough
+  // median CTA bus headway; matches the connector fallback in expandReachable
+  // and appendBridgeToEnd so the same unknown-headway route isn't priced
+  // differently in different phases of planning.
+  const headwayMin = headwayMinutes(gtfs, now) ?? 8;
   const waitMin = headwayMin / 2;
   return (rideMin + waitMin) * 60;
 }
@@ -330,8 +340,14 @@ function runOnePlan({
           const opps = isLastLeg ? 0 : transferAccess(alightStop, ridden, chainSet, rt, scheduleOk);
           const rideSec = legTimeSeconds(ride, route.gtfs, now);
           let score = opps - (reach.time + rideSec) * TIME_PENALTY_PER_SEC;
-          if (isLastLeg && end) {
-            score -= haversineFeet(alightStop, end) * END_BIAS_PENALTY_PER_FT;
+          // Apply destination bias to every leg when an end is set, not just
+          // the last. Without this, intermediate legs score on transfer-
+          // access only and the chain can wander far enough that the bridge
+          // phase has nothing reachable. Intermediate legs get a smaller
+          // weight so transfer-access still dominates the inner picks.
+          if (end) {
+            const factor = isLastLeg ? 1 : 0.35;
+            score -= haversineFeet(alightStop, end) * END_BIAS_PENALTY_PER_FT * factor;
           }
           if (noise && noiseRange) score += (noise() - 0.5) * noiseRange;
 
@@ -427,6 +443,12 @@ function appendBridgeToEnd({
 }) {
   const { routes, patterns } = dataset;
   const usedRoutes = new Set([...ridden, ...chainSet]);
+  // Track only the IMMEDIATELY-prior bus route so we don't chain two short
+  // hops of the same bus down the same street. Trains can repeat (Red Line
+  // first to 47th, then to 95th if the stride sampling clipped the longer
+  // option), and any bus can repeat if a different hop sits between them.
+  // MIN_BRIDGE_RIDE_FT + the board≠alight guard prevent the abusive case.
+  let lastBusRoute = null;
 
   for (let hop = 0; hop < MAX_BRIDGE_HOPS; hop++) {
     const position = getPosition();
@@ -444,6 +466,7 @@ function appendBridgeToEnd({
         const route = routes[rt];
         if (!route) continue;
         if (!route.isTrain && !usedRoutes.has(rt)) continue;
+        if (!route.isTrain && rt === lastBusRoute) continue;
         if (!scheduleOk.get(rt)) continue;
         const headway = headwayMinutes(route.gtfs, now) ?? 8;
         const waitSec = (headway * 60) / 2;
@@ -455,14 +478,16 @@ function appendBridgeToEnd({
           if (boardIdx < 0) continue;
           const minPerFt = minutesPerFoot(route.gtfs, p, now);
 
-          let strideCount = 0;
+          // No stride sampling here — the bridge runs at most MAX_BRIDGE_HOPS
+          // times and the optimal alight (often the train terminus) can sit
+          // on a non-strided index. Evaluating every alight is cheap.
           for (const alightIdx of alightsAfter(p, boardIdx, MAX_BRIDGE_RIDE_FT)) {
-            strideCount++;
-            if (route.isTrain && strideCount % ALIGHT_STRIDE_FREE !== 0) continue;
             const alight = p.stops[alightIdx];
+            if (alight.stopId === board.stopId) continue;
             const distToEnd = haversineFeet(alight, end);
             if (distToEnd >= curDist) continue;
             const rideFt = alight.pdist - p.stops[boardIdx].pdist;
+            if (rideFt < MIN_BRIDGE_RIDE_FT) continue;
             const rideSec = rideFt * minPerFt * 60;
             const totalTime = walkSec1 + waitSec + rideSec;
             const progress = curDist - distToEnd;
@@ -504,6 +529,7 @@ function appendBridgeToEnd({
       free: true,
     });
     usedRoutes.add(best.rt);
+    lastBusRoute = routes[best.rt]?.isTrain ? lastBusRoute : best.rt;
     setPosition(best.alightStop);
   }
 }
@@ -615,6 +641,7 @@ export function planTrips({
       dataset,
       point: start,
       ridden,
+      scheduleMode,
       now,
       stopIndex,
     });

@@ -12,5 +12,10 @@ export function loadRidden() {
 }
 
 export function saveRidden(set) {
-  localStorage.setItem(KEY, JSON.stringify([...set].sort()));
+  try {
+    localStorage.setItem(KEY, JSON.stringify([...set].sort()));
+  } catch {
+    // Private-mode Safari and storage-quota errors land here. The toggle still
+    // updates in-memory React state; we just can't persist across reloads.
+  }
 }

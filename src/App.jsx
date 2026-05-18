@@ -155,28 +155,50 @@ export default function App() {
           {ready && (
             <>
               <div className="rounded-lg border border-gh-border bg-gh-surface text-sm">
-                <button
-                  type="button"
-                  onClick={() => setSetupCollapsed(!setupCollapsed)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
-                >
-                  <span className="text-gh-muted text-xs uppercase tracking-wide">Trip setup</span>
-                  {setupCollapsed ? (
-                    <span className="flex min-w-0 items-center gap-2">
+                <div className="flex items-center justify-between gap-2 px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setSetupCollapsed(!setupCollapsed)}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                  >
+                    <span className="text-gh-muted text-xs uppercase tracking-wide">
+                      Trip setup
+                    </span>
+                    {setupCollapsed && (
                       <span className="truncate text-gh-muted/80 text-xs">
                         {start?.label || 'No start'}
                         {end ? ` → ${end.label}` : roundTrip ? ' · round trip' : ''} · ≤{cap} new
                       </span>
-                      <span className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-white text-xs">
+                    )}
+                  </button>
+                  {setupCollapsed ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handlePlan}
+                        disabled={!start || busy}
+                        className="shrink-0 rounded bg-emerald-600 px-2 py-0.5 text-white text-xs hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        {busy ? '…' : 'Re-plan'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSetupCollapsed(false)}
+                        className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-white text-xs hover:bg-gh-border"
+                      >
                         Edit
-                      </span>
-                    </span>
+                      </button>
+                    </>
                   ) : (
-                    <span className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSetupCollapsed(true)}
+                      className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-white"
+                    >
                       Hide
-                    </span>
+                    </button>
                   )}
-                </button>
+                </div>
                 {!setupCollapsed && (
                   <div className="flex flex-col gap-3 border-gh-border border-t p-3">
                     <StartPicker
