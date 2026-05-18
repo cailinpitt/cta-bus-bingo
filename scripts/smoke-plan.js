@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { planTrip, planTrips } from '../src/lib/planner.js';
+import { augmentStopsForPlanning, planTrip, planTrips } from '../src/lib/planner.js';
 import { buildStopIndex } from '../src/lib/spatial.js';
 
 const DATA = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data');
@@ -38,7 +38,9 @@ function loadDatasetSync() {
         pdist: pt.pdist,
         seq: pt.seq,
       }));
-    patterns[pid] = { ...p, pid, rt, stops: stopPoints };
+    const stopIdToIdx = new Map();
+    for (let i = 0; i < stopPoints.length; i++) stopIdToIdx.set(stopPoints[i].stopId, i);
+    patterns[pid] = { ...p, pid, rt, stops: stopPoints, stopIdToIdx };
     for (const s of stopPoints) {
       if (!stops[s.stopId]) {
         stops[s.stopId] = {
@@ -61,6 +63,7 @@ console.log(
 );
 
 const stopIndex = buildStopIndex(dataset.stops);
+augmentStopsForPlanning(dataset.stops, stopIndex, dataset.routes);
 
 // Belmont & Clark — popular north-side transfer point.
 const start = { lat: 41.9395, lon: -87.6586 };

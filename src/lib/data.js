@@ -57,7 +57,12 @@ export async function loadDataset(base = `${import.meta.env.BASE_URL}data`) {
         pdist: pt.pdist,
         seq: pt.seq,
       }));
-    patterns[p.pid] = { ...p, rt, stops: stopPoints };
+    // stopIdToIdx lets the planner do O(1) `find this stop's index along the
+    // pattern` lookups instead of scanning p.stops with findIndex on every
+    // candidate ride.
+    const stopIdToIdx = new Map();
+    for (let i = 0; i < stopPoints.length; i++) stopIdToIdx.set(stopPoints[i].stopId, i);
+    patterns[p.pid] = { ...p, rt, stops: stopPoints, stopIdToIdx };
 
     if (!stopsByRoute[rt]) stopsByRoute[rt] = new Set();
     for (const s of stopPoints) {

@@ -90,7 +90,7 @@ function* alightsAfter(pattern, boardIdx, maxFt) {
 //
 // `allowFree=false` disables the free-ride expansion (used for the first run
 // of the smoke test or callers that want pure walking).
-function expandReachable({ point, dataset, ridden, scheduleMode, now, stopIndex, allowFree }) {
+function expandReachable({ point, dataset, ridden, scheduleOk, now, stopIndex, allowFree }) {
   const { routes, patterns } = dataset;
   const reachable = new Map(); // stopId -> { time, viaFreeLeg, walkFromPoint, finalWalkFeet }
 
@@ -118,14 +118,14 @@ function expandReachable({ point, dataset, ridden, scheduleMode, now, stopIndex,
     for (const rt of board.routes) {
       const route = routes[rt];
       if (!isFreeConnector(route, rt, ridden)) continue;
-      if (!chooseSchedule(scheduleMode, route.gtfs, now)) continue;
+      if (!scheduleOk.get(rt)) continue;
       const headway = headwayMinutes(route.gtfs, now) ?? 8;
       const waitSec = (headway * 60) / 2;
 
       for (const pid of route.patternIds) {
         const p = patterns[pid];
         if (!p) continue;
-        const boardIdx = p.stops.findIndex((s) => s.stopId === board.stopId);
+        const boardIdx = p.stopIdToIdx.get(board.stopId) ?? -1;
         if (boardIdx < 0) continue;
 
         let strideCount = 0;
@@ -193,31 +193,41 @@ function legTimeSeconds({ pattern, boardIdx, alightIdx }, gtfs, now) {
   return (rideMin + waitMin) * 60;
 }
 
+// Precompute, for each stop, a Map<rt, minDistFt> of every bus route reachable
+// within MAX_WALK_FT (closest stop of that route on each bus pattern). Mutates
+// `stops` to attach `busRoutesNear`. Called once after the spatial index is
+// built; lets `transferAccess` skip the O(nearby_stops × routes_per_stop) scan
+// at planning time.
+export function augmentStopsForPlanning(stops, stopIndex, routes) {
+  for (const stop of Object.values(stops)) {
+    const map = new Map();
+    const nearby = stopsNear(stopIndex, stop, MAX_WALK_FT);
+    for (const s of nearby) {
+      const d = haversineFeet(s, stop);
+      if (d > MAX_WALK_FT) continue;
+      for (const rt of s.routes) {
+        const route = routes[rt];
+        if (!route || route.isTrain) continue;
+        const prev = map.get(rt);
+        if (prev === undefined || d < prev) map.set(rt, d);
+      }
+    }
+    stop.busRoutesNear = map;
+  }
+}
+
 // Distance-weighted count of unridden, in-service bus routes accessible from
 // `stop`. Each route contributes (1 - d/MAX_WALK_FT) using the *closest* stop
-// of that route within walking range — so a transfer right at your feet
-// counts ~1.0 and one at 700m counts ~0.1. This replaces the old binary
-// "anything within 200m counts equally" so the planner prefers alights that
-// are actually close to where the next bus stops, not just within shouting
-// distance of one.
-function transferAccess(stop, stopIndex, ridden, currentChain, mySelf, routes, scheduleMode, now) {
-  const nearby = stopsNear(stopIndex, stop, MAX_WALK_FT);
-  const bestDistByRt = new Map();
-  for (const s of nearby) {
-    const d = haversineFeet(s, stop);
-    if (d > MAX_WALK_FT) continue;
-    for (const rt of s.routes) {
-      if (rt === mySelf) continue;
-      if (ridden.has(rt) || currentChain.has(rt)) continue;
-      const route = routes[rt];
-      if (!route || route.isTrain) continue;
-      if (!chooseSchedule(scheduleMode, route.gtfs, now)) continue;
-      const prev = bestDistByRt.get(rt);
-      if (prev === undefined || d < prev) bestDistByRt.set(rt, d);
-    }
-  }
+// of that route within walking range — so a transfer right at your feet counts
+// ~1.0 and one at 700 ft counts ~0.1. Uses the precomputed busRoutesNear map
+// so this is O(routes_near_stop) instead of O(nearby_stops × routes_per_stop).
+function transferAccess(stop, ridden, currentChain, mySelf, scheduleOk) {
+  if (!stop.busRoutesNear) return 0;
   let score = 0;
-  for (const d of bestDistByRt.values()) {
+  for (const [rt, d] of stop.busRoutesNear) {
+    if (rt === mySelf) continue;
+    if (ridden.has(rt) || currentChain.has(rt)) continue;
+    if (!scheduleOk.get(rt)) continue;
     score += Math.max(0, 1 - d / MAX_WALK_FT);
   }
   return score;
@@ -227,7 +237,7 @@ function* candidateUnriddenRides(route, boardStopId, patterns) {
   for (const pid of route.patternIds) {
     const p = patterns[pid];
     if (!p) continue;
-    const boardIdx = p.stops.findIndex((s) => s.stopId === boardStopId);
+    const boardIdx = p.stopIdToIdx.get(boardStopId) ?? -1;
     if (boardIdx < 0) continue;
     for (let alightIdx = boardIdx + 1; alightIdx < p.stops.length; alightIdx++) {
       yield { pattern: p, boardIdx, alightIdx };
@@ -244,7 +254,7 @@ function runOnePlan({
   cap,
   roundTrip,
   end,
-  scheduleMode,
+  scheduleOk,
   now,
   stopIndex,
   allowFree,
@@ -273,7 +283,7 @@ function runOnePlan({
         point: position,
         dataset,
         ridden,
-        scheduleMode,
+        scheduleOk,
         now,
         stopIndex,
         allowFree,
@@ -295,7 +305,7 @@ function runOnePlan({
         if (chainSet.has(rt) || ridden.has(rt)) continue;
         const route = routes[rt];
         if (!route || route.isTrain) continue;
-        if (!chooseSchedule(scheduleMode, route.gtfs, now)) continue;
+        if (!scheduleOk.get(rt)) continue;
 
         for (const ride of candidateUnriddenRides(route, stopId, patterns)) {
           const alightStop = ride.pattern.stops[ride.alightIdx];
@@ -317,18 +327,7 @@ function runOnePlan({
           }
           if (backtrack) continue;
 
-          const opps = isLastLeg
-            ? 0
-            : transferAccess(
-                alightStop,
-                stopIndex,
-                ridden,
-                chainSet,
-                rt,
-                routes,
-                scheduleMode,
-                now,
-              );
+          const opps = isLastLeg ? 0 : transferAccess(alightStop, ridden, chainSet, rt, scheduleOk);
           const rideSec = legTimeSeconds(ride, route.gtfs, now);
           let score = opps - (reach.time + rideSec) * TIME_PENALTY_PER_SEC;
           if (isLastLeg && end) {
@@ -397,7 +396,7 @@ function runOnePlan({
       end,
       dataset,
       ridden,
-      scheduleMode,
+      scheduleOk,
       now,
       stopIndex,
     });
@@ -422,7 +421,7 @@ function appendBridgeToEnd({
   end,
   dataset,
   ridden,
-  scheduleMode,
+  scheduleOk,
   now,
   stopIndex,
 }) {
@@ -445,14 +444,14 @@ function appendBridgeToEnd({
         const route = routes[rt];
         if (!route) continue;
         if (!route.isTrain && !usedRoutes.has(rt)) continue;
-        if (!chooseSchedule(scheduleMode, route.gtfs, now)) continue;
+        if (!scheduleOk.get(rt)) continue;
         const headway = headwayMinutes(route.gtfs, now) ?? 8;
         const waitSec = (headway * 60) / 2;
 
         for (const pid of route.patternIds) {
           const p = patterns[pid];
           if (!p) continue;
-          const boardIdx = p.stops.findIndex((s) => s.stopId === board.stopId);
+          const boardIdx = p.stopIdToIdx.get(board.stopId) ?? -1;
           if (boardIdx < 0) continue;
           const minPerFt = minutesPerFoot(route.gtfs, p, now);
 
@@ -535,6 +534,14 @@ export function planTrips({
   // reachable expansions are valid regardless of cap or endMode.
   const reachableCache = new Map();
 
+  // chooseSchedule is called millions of times in the inner loop with the same
+  // (rt, scheduleMode, now). Resolve once per route up front and let the hot
+  // paths read this map instead.
+  const scheduleOk = new Map();
+  for (const [rt, route] of Object.entries(dataset.routes)) {
+    scheduleOk.set(rt, chooseSchedule(scheduleMode, route.gtfs, now));
+  }
+
   function searchOne({ capCount, runs }) {
     const baseline = runOnePlan({
       dataset,
@@ -543,7 +550,7 @@ export function planTrips({
       cap: capCount,
       roundTrip,
       end,
-      scheduleMode,
+      scheduleOk,
       now,
       stopIndex,
       allowFree,
@@ -561,7 +568,7 @@ export function planTrips({
         cap: capCount,
         roundTrip,
         end,
-        scheduleMode,
+        scheduleOk,
         now,
         stopIndex,
         allowFree,
@@ -608,7 +615,6 @@ export function planTrips({
       dataset,
       point: start,
       ridden,
-      scheduleMode,
       now,
       stopIndex,
     });

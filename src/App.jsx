@@ -6,7 +6,7 @@ import StartPicker from './components/StartPicker.jsx';
 import TripMap from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
 import { loadDataset } from './lib/data.js';
-import { planTrips } from './lib/planner.js';
+import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
 import { buildStopIndex } from './lib/spatial.js';
 import { loadRidden, saveRidden } from './lib/storage.js';
 
@@ -30,8 +30,9 @@ export default function App() {
   useEffect(() => {
     loadDataset()
       .then((ds) => {
-        setDataset(ds);
         stopIndexRef.current = buildStopIndex(ds.stops);
+        augmentStopsForPlanning(ds.stops, stopIndexRef.current, ds.routes);
+        setDataset(ds);
       })
       .catch((e) => setLoadErr(e.message));
   }, []);
