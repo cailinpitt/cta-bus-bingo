@@ -120,7 +120,7 @@ export default function RiddenList({ routes, ridden, setRidden }) {
             </div>
           )}
 
-          <div className="grid max-h-[50vh] grid-cols-4 gap-1 overflow-y-auto sm:grid-cols-6">
+          <div className="grid max-h-[60vh] grid-cols-4 gap-1.5 overflow-y-auto sm:grid-cols-6">
             {sorted.map(([rt, r]) => {
               const on = ridden.has(rt);
               return (
@@ -129,7 +129,7 @@ export default function RiddenList({ routes, ridden, setRidden }) {
                   key={rt}
                   onClick={() => toggle(rt)}
                   title={r.name}
-                  className={`rounded px-1.5 py-1 text-xs ${
+                  className={`flex min-h-[44px] items-center justify-center rounded px-2 py-2 text-sm font-medium ${
                     on ? 'bg-emerald-700 text-white' : 'bg-gh-subtle text-gh-muted hover:text-white'
                   }`}
                 >

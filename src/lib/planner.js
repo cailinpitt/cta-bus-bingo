@@ -448,7 +448,15 @@ function appendBridgeToEnd({
   // first to 47th, then to 95th if the stride sampling clipped the longer
   // option), and any bus can repeat if a different hop sits between them.
   // MIN_BRIDGE_RIDE_FT + the board≠alight guard prevent the abusive case.
+  // Seed from the last non-train leg of Phase 1 — without this, the first
+  // bridge hop could re-board the same bus we just got off.
   let lastBusRoute = null;
+  for (let i = chain.length - 1; i >= 0; i--) {
+    if (!routes[chain[i].rt]?.isTrain) {
+      lastBusRoute = chain[i].rt;
+      break;
+    }
+  }
 
   for (let hop = 0; hop < MAX_BRIDGE_HOPS; hop++) {
     const position = getPosition();

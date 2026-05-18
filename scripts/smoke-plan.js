@@ -2,10 +2,11 @@
 // run the planner from a known starting point. Confirms data integrity + that
 // the planner returns a sensible chain before we wire up the UI.
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { shapeDataset } from '../src/lib/data.js';
 import { augmentStopsForPlanning, planTrip, planTrips } from '../src/lib/planner.js';
 import { buildStopIndex } from '../src/lib/spatial.js';
 
@@ -14,47 +15,8 @@ const DATA = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'd
 function loadDatasetSync() {
   const routes = JSON.parse(readFileSync(resolve(DATA, 'routes.json'), 'utf8'));
   const routePatterns = JSON.parse(readFileSync(resolve(DATA, 'route-patterns.json'), 'utf8'));
-  // route-patterns.json is bus-only (legacy); train pids are listed in routes.json.
-  for (const [rt, r] of Object.entries(routes)) {
-    if (r.isTrain && !routePatterns[rt]) routePatterns[rt] = r.patternIds;
-  }
-  const pidToRoute = {};
-  for (const [rt, pids] of Object.entries(routePatterns)) {
-    for (const pid of pids) pidToRoute[pid] = rt;
-  }
-  const patterns = {};
-  const stops = {};
-  for (const file of readdirSync(resolve(DATA, 'patterns'))) {
-    const p = JSON.parse(readFileSync(resolve(DATA, 'patterns', file), 'utf8'));
-    const pid = String(p.pid);
-    const rt = pidToRoute[pid];
-    const stopPoints = p.points
-      .filter((pt) => pt.type === 'S' && pt.stopId)
-      .map((pt) => ({
-        stopId: String(pt.stopId),
-        stopName: pt.stopName,
-        lat: pt.lat,
-        lon: pt.lon,
-        pdist: pt.pdist,
-        seq: pt.seq,
-      }));
-    const stopIdToIdx = new Map();
-    for (let i = 0; i < stopPoints.length; i++) stopIdToIdx.set(stopPoints[i].stopId, i);
-    patterns[pid] = { ...p, pid, rt, stops: stopPoints, stopIdToIdx };
-    for (const s of stopPoints) {
-      if (!stops[s.stopId]) {
-        stops[s.stopId] = {
-          stopId: s.stopId,
-          stopName: s.stopName,
-          lat: s.lat,
-          lon: s.lon,
-          routes: new Set(),
-        };
-      }
-      stops[s.stopId].routes.add(rt);
-    }
-  }
-  return { routes, patterns, stops };
+  const bundled = JSON.parse(readFileSync(resolve(DATA, 'patterns.json'), 'utf8'));
+  return shapeDataset({ routes, routePatterns, patternList: Object.values(bundled) });
 }
 
 const dataset = loadDatasetSync();

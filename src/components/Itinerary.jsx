@@ -1,12 +1,6 @@
 // Per-leg list with times. Colors must match TripMap's palette.
-import { fmtWalkDistance } from '../lib/units.js';
+import { fmtMin, fmtWalkDistance } from '../lib/units.js';
 import { colorForLeg } from './TripMap.jsx';
-
-function fmtMin(seconds) {
-  const m = Math.round(seconds / 60);
-  if (m < 60) return `${m} min`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
 
 export default function Itinerary({ plan, routes, onUseSuggestion }) {
   if (!plan) return null;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Controls from './components/Controls.jsx';
 import Itinerary from './components/Itinerary.jsx';
 import RiddenList from './components/RiddenList.jsx';
@@ -106,11 +106,25 @@ export default function App() {
     }
   }
 
-  function handleMapClick({ lat, lon }) {
-    const point = { lat, lon, label: `${lat.toFixed(4)}, ${lon.toFixed(4)}` };
-    if (mapClickTarget === 'end') handlePickEnd(point);
-    else handlePickStart(point);
-  }
+  // Stable across renders so TripMap doesn't rebind its map click listener
+  // on every parent re-render (it would otherwise churn through register/
+  // unregister cycles whenever any unrelated App state changes).
+  const handleMapClick = useCallback(
+    ({ lat, lon }) => {
+      const point = { lat, lon, label: `${lat.toFixed(4)}, ${lon.toFixed(4)}` };
+      // Inline the pick handlers' core state updates so this callback's deps
+      // stay limited to mapClickTarget — handlePickStart/End are recreated
+      // every render and would re-trigger the map's click-listener rebind.
+      if (mapClickTarget === 'end') {
+        setEnd(point);
+        setRoundTripState(false);
+      } else {
+        setStart(point);
+      }
+      setMapClickTarget(null);
+    },
+    [mapClickTarget],
+  );
 
   function handlePlan() {
     if (!dataset || !start) return;
@@ -192,14 +206,32 @@ export default function App() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         <main className="sticky top-0 z-10 h-[45vh] shrink-0 lg:static lg:order-2 lg:h-auto lg:min-h-0 lg:flex-1">
-          <TripMap
-            plan={currentPlan}
-            routes={dataset?.routes}
-            start={start}
-            end={end}
-            onMapClick={handleMapClick}
-            mapClickMode={mapClickTarget !== null}
-          />
+          <div className="relative h-full w-full">
+            <TripMap
+              plan={currentPlan}
+              routes={dataset?.routes}
+              start={start}
+              end={end}
+              onMapClick={handleMapClick}
+              mapClickMode={mapClickTarget !== null}
+            />
+            {mapClickTarget && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-2">
+                <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-amber-600/95 px-3 py-1.5 text-white text-xs shadow-lg">
+                  <span>
+                    Tap the map to set {mapClickTarget === 'end' ? 'destination' : 'starting point'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMapClickTarget(null)}
+                    className="rounded-full bg-amber-800/70 px-2 py-0.5 text-[11px] hover:bg-amber-900"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </main>
         <aside className="flex w-full shrink-0 flex-col gap-3 p-3 lg:order-1 lg:w-96 lg:overflow-y-auto lg:border-gh-border lg:border-r">
           {ready && (

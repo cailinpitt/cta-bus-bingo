@@ -1,10 +1,6 @@
 // Horizontal tab row across the top of the results — one per candidate trip.
 // Single-line label so the strip can't collapse to invisibility on narrow viewports.
-function fmtMin(seconds) {
-  const m = Math.round(seconds / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h${m % 60 ? `${m % 60}m` : ''}`;
-}
+import { fmtMinCompact } from '../lib/units.js';
 
 export default function TripPicker({ trips, selectedIndex, onSelect }) {
   if (!trips || trips.length <= 1) return null;
@@ -27,7 +23,7 @@ export default function TripPicker({ trips, selectedIndex, onSelect }) {
           >
             <div className="font-semibold leading-tight">Option {i + 1}</div>
             <div className="text-xs leading-tight opacity-85">
-              {t.newRouteCount} new · {fmtMin(t.totalSeconds)}
+              {t.newRouteCount} new · {fmtMinCompact(t.totalSeconds)}
             </div>
           </button>
         ))}

@@ -26,6 +26,10 @@ export function colorForLeg(leg, i, routes) {
 
 const MAP_STYLE = {
   version: 8,
+  // Required for symbol layers with text-field — using MapLibre's public
+  // demotiles glyph server (free, no key). Without this, route-id labels on
+  // leg polylines render as blank.
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   sources: {
     basemap: {
       type: 'raster',
@@ -62,6 +66,10 @@ function legGeoJSON(plan, routes) {
       properties: {
         color: colorForLeg(l, i, routes),
         rt: l.rt,
+        // Display label for the symbol layer: route id for buses, but the
+        // full route name for trains (e.g. "Red Line" instead of "train-red"
+        // since train ids are internal synthetic keys).
+        label: routes?.[l.rt]?.isTrain ? routes[l.rt].name : l.rt,
         idx: i,
         free: l.free ? 1 : 0,
       },
@@ -199,6 +207,26 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
           'line-dasharray': [3, 2],
         },
         layout: { 'line-cap': 'round', 'line-join': 'round' },
+      });
+      // Route-id labels along each leg polyline. symbol-placement:line draws
+      // text following the line and skips labels that don't fit.
+      map.addLayer({
+        id: 'legs-label',
+        type: 'symbol',
+        source: 'legs',
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['get', 'label'],
+          'text-font': ['Noto Sans Bold'],
+          'text-size': 13,
+          'text-anchor': 'center',
+          'symbol-spacing': 250,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#0d1117',
+          'text-halo-width': 2.5,
+        },
       });
       map.addLayer({
         id: 'walks-line',

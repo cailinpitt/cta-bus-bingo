@@ -11,6 +11,22 @@ export function fmtWalkDistance(feet) {
   return `${mi.toFixed(1)} mi`;
 }
 
+// Format a duration in seconds as minutes, with hours when ≥ 60 min.
+export function fmtMin(seconds) {
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// Compact variant for tight UI (e.g. the trip-picker tab strip).
+export function fmtMinCompact(seconds) {
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem ? `${h}h${rem}m` : `${h}h`;
+}
+
 // Format a ride distance (input feet from the pattern's pdist field).
 export function fmtRideDistance(feet) {
   if (feet < 1000) return `${Math.round(feet / 10) * 10} ft`;

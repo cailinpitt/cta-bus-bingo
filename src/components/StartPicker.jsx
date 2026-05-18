@@ -116,15 +116,42 @@ export default function StartPicker({
           <input
             value={addr}
             onChange={(e) => setAddr(e.target.value)}
-            placeholder="e.g. Belmont & Clark"
-            className="flex-1 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white placeholder:text-gh-muted/60"
+            disabled={busy}
+            placeholder={busy ? 'Looking up…' : 'e.g. Belmont & Clark'}
+            className="flex-1 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white placeholder:text-gh-muted/60 disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={busy || !addr.trim()}
-            className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-500 disabled:opacity-50"
+            className="flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-500 disabled:opacity-50"
           >
-            {busy ? '…' : 'Go'}
+            {busy && (
+              <svg
+                className="h-3 w-3 animate-spin"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                role="img"
+                aria-label="Looking up"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  opacity="0.25"
+                />
+                <path
+                  d="M4 12a8 8 0 018-8"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              </svg>
+            )}
+            <span>{busy ? '' : 'Go'}</span>
           </button>
         </form>
       )}
