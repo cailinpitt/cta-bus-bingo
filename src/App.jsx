@@ -9,16 +9,19 @@ import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
 import { buildStopIndex } from './lib/spatial.js';
 import { loadRidden, saveRidden } from './lib/storage.js';
+import { readUrlState, writeUrlState } from './lib/urlState.js';
+
+const initialUrl = readUrlState();
 
 export default function App() {
   const [dataset, setDataset] = useState(null);
   const [loadErr, setLoadErr] = useState(null);
-  const [start, setStart] = useState(null);
-  const [end, setEnd] = useState(null);
+  const [start, setStart] = useState(initialUrl.start ?? null);
+  const [end, setEnd] = useState(initialUrl.end ?? null);
   const [ridden, setRiddenState] = useState(() => loadRidden());
-  const [cap, setCap] = useState(3);
-  const [roundTrip, setRoundTripState] = useState(false);
-  const [scheduleMode, setScheduleMode] = useState('now');
+  const [cap, setCap] = useState(initialUrl.cap ?? 3);
+  const [roundTrip, setRoundTripState] = useState(initialUrl.roundTrip ?? false);
+  const [scheduleMode, setScheduleMode] = useState(initialUrl.scheduleMode ?? 'now');
   const [result, setResult] = useState(null); // { trips, suggestedStart }
   const [selectedTrip, setSelectedTrip] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -27,10 +30,17 @@ export default function App() {
   // Collapse the trip-setup section to give the map and itinerary more room.
   // Auto-collapses when a plan lands and re-opens when the plan is cleared.
   const [setupCollapsed, setSetupCollapsed] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     setSetupCollapsed(!!result);
   }, [result]);
+
+  // Persist planning context to the URL hash so refreshes restore state and
+  // the URL is shareable. Ridden set stays in localStorage — private.
+  useEffect(() => {
+    writeUrlState({ start, end, cap, roundTrip, scheduleMode });
+  }, [start, end, cap, roundTrip, scheduleMode]);
 
   const stopIndexRef = useRef(null);
 
@@ -43,6 +53,18 @@ export default function App() {
       })
       .catch((e) => setLoadErr(e.message));
   }, []);
+
+  // Auto-plan once on cold load if the URL hash already specified a start.
+  // This is what makes a shared link "just work" — paste, page loads, plan
+  // computes against the recipient's own ridden set.
+  const autoPlannedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fires exactly once when the dataset becomes available; autoPlannedRef guards against re-runs even though handlePlan closes over more state
+  useEffect(() => {
+    if (autoPlannedRef.current) return;
+    if (!dataset || !initialUrl.start) return;
+    autoPlannedRef.current = true;
+    handlePlan();
+  }, [dataset]);
 
   function setRidden(next) {
     setRiddenState(next);
@@ -65,6 +87,23 @@ export default function App() {
     setRoundTripState(v);
     // Mutually exclusive: turning round-trip on clears any end destination.
     if (v) setEnd(null);
+  }
+
+  async function handleShare() {
+    const url = window.location.href;
+    try {
+      // Prefer the native share sheet on mobile so the user can send to
+      // Messages/Mail/etc. directly. Falls back to clipboard.
+      if (navigator.share && /Mobi|Android/.test(navigator.userAgent)) {
+        await navigator.share({ title: 'CTA Bus Bingo', url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 1500);
+    } catch {
+      // User cancelled the share sheet, or clipboard blocked — no-op.
+    }
   }
 
   function handleMapClick({ lat, lon }) {
@@ -126,11 +165,22 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-gh-canvas text-white">
-      <header className="flex items-baseline justify-between border-gh-border border-b px-4 py-2">
+      <header className="flex items-center justify-between border-gh-border border-b px-4 py-2">
         <h1 className="font-semibold text-lg">CTA Bus Bingo</h1>
-        <div className="text-gh-muted text-xs">
-          {ready ? `${Object.keys(dataset.routes).length} routes` : 'loading…'}
-          {gtfsAge && <> · schedule {gtfsAge}</>}
+        <div className="flex items-center gap-3">
+          <div className="text-gh-muted text-xs">
+            {ready ? `${Object.keys(dataset.routes).length} routes` : 'loading…'}
+            {gtfsAge && <> · schedule {gtfsAge}</>}
+          </div>
+          <button
+            type="button"
+            onClick={handleShare}
+            disabled={!start}
+            className="rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border disabled:cursor-not-allowed disabled:opacity-40"
+            title={start ? 'Copy a link that restores this trip' : 'Pick a starting point first'}
+          >
+            {shareCopied ? 'Copied!' : 'Share'}
+          </button>
         </div>
       </header>
 

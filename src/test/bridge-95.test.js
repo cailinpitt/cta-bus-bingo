@@ -71,10 +71,43 @@ describe('bridge phase picks ridden buses to close the last mile', () => {
   // Actual ridden export from the user's localStorage. Trains are always
   // free connectors regardless of ridden state.
   const ridden = new Set([
-    '146', '147', '152', '155', '157', '21', '22', '28', '31', '35', '37',
-    '4', '49', '50', '53', '55', '56', '6', '62', '65', '66', '67', '70',
-    '72', '73', '74', '76', '77', '8', '80', '81', '9', '94', '95',
-    'J14', 'X49', 'X9',
+    '146',
+    '147',
+    '152',
+    '155',
+    '157',
+    '21',
+    '22',
+    '28',
+    '31',
+    '35',
+    '37',
+    '4',
+    '49',
+    '50',
+    '53',
+    '55',
+    '56',
+    '6',
+    '62',
+    '65',
+    '66',
+    '67',
+    '70',
+    '72',
+    '73',
+    '74',
+    '76',
+    '77',
+    '8',
+    '80',
+    '81',
+    '9',
+    '94',
+    '95',
+    'J14',
+    'X49',
+    'X9',
   ]);
   const now = new Date('2026-05-18T15:30:00-05:00');
 
@@ -109,9 +142,7 @@ describe('bridge phase picks ridden buses to close the last mile', () => {
           const last = t.legs[t.legs.length - 1];
           return `  Option ${idx + 1} [${t.reachedEnd ? 'REACHED' : 'STRANDED'}]: ${t.legs.map((l) => l.rt).join(' -> ')} (ends at ${last.alightStop.stopName})`;
         });
-        throw new Error(
-          `Pool mixed reaching + non-reaching trips:\n${mixed.join('\n')}`,
-        );
+        throw new Error(`Pool mixed reaching + non-reaching trips:\n${mixed.join('\n')}`);
       }
     }
     expect(violations).toBe(0);

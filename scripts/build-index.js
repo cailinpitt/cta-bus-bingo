@@ -183,6 +183,17 @@ async function main() {
 
   writeFileSync(resolve(OUT_DIR, 'routes.json'), JSON.stringify(routes));
   writeFileSync(resolve(OUT_DIR, 'route-patterns.json'), JSON.stringify(routePatterns));
+
+  // Bundle every pattern into one file. The runtime fetches this single
+  // payload instead of 300+ tiny per-pattern requests, which is a massive
+  // cold-load win over mobile networks. Individual patterns/<pid>.json are
+  // also kept for the smoke script and ad-hoc tooling.
+  const bundled = {};
+  for (const pid of Object.keys(routePatterns).flatMap((rt) => routePatterns[rt])) {
+    const path = resolve(OUT_PATTERNS, `${pid}.json`);
+    if (existsSync(path)) bundled[pid] = JSON.parse(readFileSync(path, 'utf8'));
+  }
+  writeFileSync(resolve(OUT_DIR, 'patterns.json'), JSON.stringify(bundled));
   writeFileSync(
     resolve(OUT_DIR, 'meta.json'),
     JSON.stringify({

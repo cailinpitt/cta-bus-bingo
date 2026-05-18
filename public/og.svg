@@ -37,15 +37,22 @@
     CTA bus routes as possible.
   </text>
 
-  <!-- Footer tags -->
-  <g font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="22" font-weight="600">
-    <rect x="80"  y="520" width="170" height="44" rx="22" fill="#1f6feb"/>
-    <text x="165" y="550" fill="#ffffff" text-anchor="middle">Chicago</text>
+  <!-- Sample route badges — pick three visually varied bus routes so the
+       card previews what the planner outputs. No trains: the app caps on
+       bus rides, not train rides. -->
+  <g font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif" font-size="26" font-weight="700">
+    <rect x="80"  y="520" width="100" height="44" rx="8" fill="#1f6feb"/>
+    <text x="130" y="552" fill="#ffffff" text-anchor="middle">151</text>
 
-    <rect x="270" y="520" width="170" height="44" rx="22" fill="#238636"/>
-    <text x="355" y="550" fill="#ffffff" text-anchor="middle">Transit</text>
+    <rect x="200" y="520" width="100" height="44" rx="8" fill="#238636"/>
+    <text x="250" y="552" fill="#ffffff" text-anchor="middle">X9</text>
 
-    <rect x="460" y="520" width="170" height="44" rx="22" fill="#a371f7"/>
-    <text x="545" y="550" fill="#ffffff" text-anchor="middle">Bingo</text>
+    <rect x="320" y="520" width="100" height="44" rx="8" fill="#db6d28"/>
+    <text x="370" y="552" fill="#ffffff" text-anchor="middle">49</text>
+
+    <!-- "{busRoutesMinusThree} more" placeholder — render-og.js substitutes
+         the actual bus-route count from public/data/meta.json so the OG
+         stays accurate after every build-index run. -->
+    <text x="440" y="552" fill="#8b949e" font-size="24" font-weight="500">+ {{BUS_MORE}} more</text>
   </g>
 </svg>

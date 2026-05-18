@@ -67,7 +67,7 @@ export default function Itinerary({ plan, routes, onUseSuggestion }) {
                 <div className="font-medium text-white">
                   {l.free && (
                     <span className="mr-1 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gh-muted">
-                      ridden
+                      {routes?.[l.rt]?.isTrain ? 'train' : 'ridden'}
                     </span>
                   )}
                   {routes?.[l.rt]?.isTrain ? null : l.rt}{' '}

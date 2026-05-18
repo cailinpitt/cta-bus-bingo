@@ -357,7 +357,13 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
         }
       }
     };
-    if (map.loaded()) apply();
+    // Use source existence (not map.loaded()) as the readiness check —
+    // map.loaded() returns false while tiles stream in, even after sources
+    // are created. And once('load') silently no-ops if load already fired,
+    // which is exactly what happens on the auto-plan-from-URL path: the
+    // dataset arrives after load, so the first plan-update fires past load
+    // and gets stuck waiting for an event that's never coming again.
+    if (map.getSource('legs')) apply();
     else map.once('load', apply);
   }, [plan, start, end, routes]);
 

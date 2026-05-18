@@ -17,6 +17,9 @@ export async function geocode(query) {
   url.searchParams.set('viewbox', CHICAGO_VIEWBOX);
   url.searchParams.set('bounded', '1');
 
+  // Nominatim's usage policy requires identifying the app. The browser sends
+  // the deployed origin as Referer automatically; that satisfies the policy
+  // without exposing personal identifiers to users of the app.
   const res = await fetch(url.toString(), {
     headers: { 'Accept-Language': 'en' },
   });

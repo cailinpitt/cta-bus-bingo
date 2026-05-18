@@ -13,10 +13,14 @@ let cached = null;
 export async function loadDataset(base = `${import.meta.env.BASE_URL}data`) {
   if (cached) return cached;
 
-  const [routes, routePatterns, meta] = await Promise.all([
+  const [routes, routePatterns, meta, bundledPatterns] = await Promise.all([
     fetch(`${base}/routes.json`).then((r) => r.json()),
     fetch(`${base}/route-patterns.json`).then((r) => r.json()),
     fetch(`${base}/meta.json`).then((r) => r.json()),
+    // Single bundled fetch instead of 300+ per-pattern requests. Massive
+    // cold-load win on mobile networks (gzipped ~1.5 MB vs 339 tiny
+    // sequential requests).
+    fetch(`${base}/patterns.json`).then((r) => r.json()),
   ]);
 
   // The route-patterns.json file is bus-only; train pids live on the route
@@ -25,15 +29,11 @@ export async function loadDataset(base = `${import.meta.env.BASE_URL}data`) {
     if (r.isTrain && !routePatterns[rt]) routePatterns[rt] = r.patternIds;
   }
 
-  // Fetch every pattern in parallel. With ~300 patterns this is fine over HTTP/2.
   const allPids = Object.values(routePatterns).flat();
-  const patternList = await Promise.all(
-    allPids.map((pid) =>
-      fetch(`${base}/patterns/${pid}.json`)
-        .then((r) => r.json())
-        .then((p) => ({ ...p, pid: String(p.pid) })),
-    ),
-  );
+  const patternList = allPids
+    .map((pid) => bundledPatterns[String(pid)])
+    .filter(Boolean)
+    .map((p) => ({ ...p, pid: String(p.pid) }));
 
   // Map pid -> rt so we can stamp patterns with their route.
   const pidToRoute = {};
