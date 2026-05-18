@@ -33,13 +33,13 @@ import { stopsNear } from './spatial.js';
 const MAX_WALK_FT = 2640; // 0.5 mi — boarding/alighting walk radius
 const TRANSFER_FT = 660; // 1/8 mi — stops "share a transfer point" within this radius
 const ROUND_TRIP_FT = 3960; // 0.75 mi — last alight must end within this of start (wider when trains allowed)
-const END_NEAR_FT = 3960; // 0.75 mi — chain is "at the destination" within this radius
+const END_NEAR_FT = 1056; // 0.2 mi — chain is "at the destination" within this radius
 // Bias the last unridden leg's score by distance-to-end so the chain trends
 // toward the destination; the post-chain bridge fills any remaining gap.
 const END_BIAS_PENALTY_PER_FT = 0.00015;
 // Bridge to end: after the unridden chain finishes, append up to N free
 // (train / already-ridden bus) hops to reduce distance to the destination.
-const MAX_BRIDGE_HOPS = 3;
+const MAX_BRIDGE_HOPS = 5;
 const MAX_BRIDGE_RIDE_FT = 5280 * 15; // 15-mile cap per bridge hop (L trains)
 const BRIDGE_TIME_PENALTY_PER_SEC = 3.28; // ft of progress required per sec of travel
 const MIN_RIDE_FT = 5280; // 1 mile — hard floor on unridden leg length

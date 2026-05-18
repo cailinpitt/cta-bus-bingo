@@ -147,6 +147,10 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
       style: MAP_STYLE,
       center: [-87.6298, 41.8781],
       zoom: 11,
+      // Force the attribution into the collapsed "i" button. MapLibre's auto
+      // mode expands it when the container is wide enough, which on our
+      // sticky-mobile map covers the route start/end markers.
+      attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
     map.on('load', () => {

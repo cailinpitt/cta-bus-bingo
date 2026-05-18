@@ -24,6 +24,13 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   // Which picker is requesting map clicks: 'start' | 'end' | null.
   const [mapClickTarget, setMapClickTarget] = useState(null);
+  // Collapse the trip-setup section to give the map and itinerary more room.
+  // Auto-collapses when a plan lands and re-opens when the plan is cleared.
+  const [setupCollapsed, setSetupCollapsed] = useState(false);
+
+  useEffect(() => {
+    setSetupCollapsed(!!result);
+  }, [result]);
 
   const stopIndexRef = useRef(null);
 
@@ -133,41 +140,79 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col-reverse lg:flex-row">
-        <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto p-3 lg:w-96 lg:border-gh-border lg:border-r">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+        <main className="sticky top-0 z-10 h-[45vh] shrink-0 lg:static lg:order-2 lg:h-auto lg:min-h-0 lg:flex-1">
+          <TripMap
+            plan={currentPlan}
+            routes={dataset?.routes}
+            start={start}
+            end={end}
+            onMapClick={handleMapClick}
+            mapClickMode={mapClickTarget !== null}
+          />
+        </main>
+        <aside className="flex w-full shrink-0 flex-col gap-3 p-3 lg:order-1 lg:w-96 lg:overflow-y-auto lg:border-gh-border lg:border-r">
           {ready && (
             <>
-              <StartPicker
-                title="Starting point"
-                noun="start"
-                value={start}
-                onPick={handlePickStart}
-                mapClickActive={mapClickTarget === 'start'}
-                setMapClickActive={(on) => setMapClickTarget(on ? 'start' : null)}
-                stops={dataset.stops}
-              />
-              <StartPicker
-                title="Destination (optional)"
-                noun="destination"
-                value={end}
-                onPick={handlePickEnd}
-                onClear={() => setEnd(null)}
-                mapClickActive={mapClickTarget === 'end'}
-                setMapClickActive={(on) => setMapClickTarget(on ? 'end' : null)}
-                stops={dataset.stops}
-              />
-              <Controls
-                cap={cap}
-                setCap={setCap}
-                roundTrip={roundTrip}
-                setRoundTrip={setRoundTrip}
-                roundTripDisabled={!!end}
-                scheduleMode={scheduleMode}
-                setScheduleMode={setScheduleMode}
-                onPlan={handlePlan}
-                busy={busy}
-                canPlan={!!start}
-              />
+              <div className="rounded-lg border border-gh-border bg-gh-surface text-sm">
+                <button
+                  type="button"
+                  onClick={() => setSetupCollapsed(!setupCollapsed)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+                >
+                  <span className="text-gh-muted text-xs uppercase tracking-wide">Trip setup</span>
+                  {setupCollapsed ? (
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-gh-muted/80 text-xs">
+                        {start?.label || 'No start'}
+                        {end ? ` → ${end.label}` : roundTrip ? ' · round trip' : ''} · ≤{cap} new
+                      </span>
+                      <span className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-white text-xs">
+                        Edit
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs">
+                      Hide
+                    </span>
+                  )}
+                </button>
+                {!setupCollapsed && (
+                  <div className="flex flex-col gap-3 border-gh-border border-t p-3">
+                    <StartPicker
+                      title="Starting point"
+                      noun="start"
+                      value={start}
+                      onPick={handlePickStart}
+                      mapClickActive={mapClickTarget === 'start'}
+                      setMapClickActive={(on) => setMapClickTarget(on ? 'start' : null)}
+                      stops={dataset.stops}
+                    />
+                    <StartPicker
+                      title="Destination (optional)"
+                      noun="destination"
+                      value={end}
+                      onPick={handlePickEnd}
+                      onClear={() => setEnd(null)}
+                      mapClickActive={mapClickTarget === 'end'}
+                      setMapClickActive={(on) => setMapClickTarget(on ? 'end' : null)}
+                      stops={dataset.stops}
+                    />
+                    <Controls
+                      cap={cap}
+                      setCap={setCap}
+                      roundTrip={roundTrip}
+                      setRoundTrip={setRoundTrip}
+                      roundTripDisabled={!!end}
+                      scheduleMode={scheduleMode}
+                      setScheduleMode={setScheduleMode}
+                      onPlan={handlePlan}
+                      busy={busy}
+                      canPlan={!!start}
+                    />
+                  </div>
+                )}
+              </div>
               {result?.trips?.length > 1 && (
                 <TripPicker
                   trips={result.trips}
@@ -192,16 +237,6 @@ export default function App() {
             </>
           )}
         </aside>
-        <main className="min-h-[50vh] flex-1 lg:min-h-0">
-          <TripMap
-            plan={currentPlan}
-            routes={dataset?.routes}
-            start={start}
-            end={end}
-            onMapClick={handleMapClick}
-            mapClickMode={mapClickTarget !== null}
-          />
-        </main>
       </div>
     </div>
   );
