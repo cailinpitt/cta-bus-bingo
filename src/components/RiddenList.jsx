@@ -1,15 +1,22 @@
 import { useMemo, useState } from 'react';
 
+// Pull the numeric portion of a route id so "X49" sorts next to "49", "N5" next to "5", etc.
+function routeNum(rt) {
+  const m = rt.match(/\d+/);
+  return m ? parseInt(m[0], 10) : Number.POSITIVE_INFINITY;
+}
+
 // Grid of every route, tick to mark ridden. Persisted to localStorage upstream.
 export default function RiddenList({ routes, ridden, setRidden }) {
   const [collapsed, setCollapsed] = useState(true);
+  const [importError, setImportError] = useState('');
   const sorted = useMemo(() => {
     return Object.entries(routes)
       .filter(([, r]) => !r.isTrain) // bingo is a bus thing; trains are free connectors regardless
       .sort(([a], [b]) => {
-        const na = parseInt(a, 10);
-        const nb = parseInt(b, 10);
-        if (na !== nb) return (Number.isNaN(na) ? 9999 : na) - (Number.isNaN(nb) ? 9999 : nb);
+        const na = routeNum(a);
+        const nb = routeNum(b);
+        if (na !== nb) return na - nb;
         return a.localeCompare(b);
       });
   }, [routes]);
@@ -40,13 +47,23 @@ export default function RiddenList({ routes, ridden, setRidden }) {
   function importJson(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportError('');
     file.text().then((txt) => {
+      let arr;
       try {
-        const arr = JSON.parse(txt);
-        if (Array.isArray(arr)) setRidden(new Set(arr.map(String)));
+        arr = JSON.parse(txt);
       } catch {
-        alert('Bad JSON');
+        setImportError(`Couldn't import ${file.name}: not valid JSON.`);
+        return;
       }
+      if (
+        !Array.isArray(arr) ||
+        !arr.every((x) => typeof x === 'string' || typeof x === 'number')
+      ) {
+        setImportError(`Couldn't import ${file.name}: expected a JSON array of route ids.`);
+        return;
+      }
+      setRidden(new Set(arr.map(String)));
     });
     e.target.value = '';
   }
@@ -93,6 +110,15 @@ export default function RiddenList({ routes, ridden, setRidden }) {
               />
             </label>
           </div>
+
+          {importError && (
+            <div
+              role="alert"
+              className="mb-2 rounded border border-red-700 bg-red-950/40 px-2 py-1 text-xs text-red-300"
+            >
+              {importError}
+            </div>
+          )}
 
           <div className="grid max-h-[50vh] grid-cols-4 gap-1 overflow-y-auto sm:grid-cols-6">
             {sorted.map(([rt, r]) => {
