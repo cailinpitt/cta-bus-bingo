@@ -1,8 +1,20 @@
 // Per-leg list with times. Colors must match TripMap's palette.
+import { useEffect, useState } from 'react';
 import { fmtMin, fmtWalkDistance } from '../lib/units.js';
 import { colorForLeg } from './TripMap.jsx';
 
-export default function Itinerary({ plan, routes, onUseSuggestion }) {
+export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMarkRidden }) {
+  // Undo target — snapshot of the ridden set immediately *before* the most
+  // recent mark action. Cleared on any subsequent plan change (parent unmounts
+  // or re-renders with a new plan key).
+  const [undoSnapshot, setUndoSnapshot] = useState(null);
+  // Reset undo state when the plan identity changes — re-planning shouldn't
+  // leave a stale "Marked N — Undo" banner pointing at the previous trip.
+  const planKey = plan?.legs?.map((l) => l.rt).join(',');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: planKey is a derived string identity for the legs
+  useEffect(() => {
+    setUndoSnapshot(null);
+  }, [planKey]);
   if (!plan) return null;
   if (plan.legs.length === 0) {
     const sug = plan.suggestedStart;
@@ -42,6 +54,45 @@ export default function Itinerary({ plan, routes, onUseSuggestion }) {
         </span>
         <span className="font-medium text-white">~{fmtMin(plan.totalSeconds)} total</span>
       </div>
+      {onMarkRidden &&
+        ridden &&
+        (() => {
+          const unmarked = plan.legs.filter((l) => !l.free && !ridden.has(l.rt)).map((l) => l.rt);
+          const uniqueUnmarked = [...new Set(unmarked)];
+          if (uniqueUnmarked.length === 0 && !undoSnapshot) return null;
+          if (undoSnapshot) {
+            return (
+              <div className="mb-2 flex items-center justify-between rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-emerald-200 text-xs">
+                <span>Marked {undoSnapshot.added.length} as ridden.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onMarkRidden(undoSnapshot.previous);
+                    setUndoSnapshot(null);
+                  }}
+                  className="rounded bg-emerald-800/60 px-2 py-0.5 hover:bg-emerald-700"
+                >
+                  Undo
+                </button>
+              </div>
+            );
+          }
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                const next = new Set(ridden);
+                for (const rt of uniqueUnmarked) next.add(rt);
+                setUndoSnapshot({ added: uniqueUnmarked, previous: new Set(ridden) });
+                onMarkRidden(next);
+              }}
+              className="mb-2 w-full rounded bg-emerald-700 px-2 py-1.5 text-white text-xs hover:bg-emerald-600"
+            >
+              Mark {uniqueUnmarked.length} {uniqueUnmarked.length === 1 ? 'route' : 'routes'} as
+              ridden
+            </button>
+          );
+        })()}
       {plan.reachedEnd === false && (
         <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-amber-200 text-xs">
           Couldn't fully reach your destination via transit — this is the closest we could get.
@@ -51,7 +102,7 @@ export default function Itinerary({ plan, routes, onUseSuggestion }) {
         {plan.legs.map((l, i) => {
           const color = colorForLeg(l, i, routes);
           return (
-            <li key={i} className="flex gap-2">
+            <li key={`${i}-${l.rt}-${l.boardStop.stopId}`} className="flex gap-2">
               <span
                 aria-hidden
                 className={`mt-1 h-3 w-3 shrink-0 ${l.free ? 'rounded-sm' : 'rounded-full'}`}

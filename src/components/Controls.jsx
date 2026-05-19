@@ -1,4 +1,11 @@
 // Cap, round-trip toggle, schedule mode, and the "Plan trip" button.
+
+// Format a Date for a datetime-local input — yyyy-MM-ddTHH:mm in local time.
+function toLocalDatetime(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function Controls({
   cap,
   setCap,
@@ -7,6 +14,8 @@ export default function Controls({
   roundTripDisabled = false,
   scheduleMode,
   setScheduleMode,
+  scheduleAt,
+  setScheduleAt,
   onPlan,
   busy,
   canPlan,
@@ -46,11 +55,18 @@ export default function Controls({
           {[
             ['now', 'Running now'],
             ['today', 'Running today'],
+            ['later', 'Later…'],
           ].map(([k, label]) => (
             <button
               type="button"
               key={k}
-              onClick={() => setScheduleMode(k)}
+              onClick={() => {
+                setScheduleMode(k);
+                // Seed the picker with "now" the first time the user opens it.
+                if (k === 'later' && !scheduleAt) {
+                  setScheduleAt?.(toLocalDatetime(new Date()));
+                }
+              }}
               className={`rounded px-2 py-1 ${
                 scheduleMode === k
                   ? 'bg-blue-600 text-white'
@@ -61,6 +77,14 @@ export default function Controls({
             </button>
           ))}
         </div>
+        {scheduleMode === 'later' && (
+          <input
+            type="datetime-local"
+            value={scheduleAt ?? ''}
+            onChange={(e) => setScheduleAt?.(e.target.value)}
+            className="mt-2 w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white text-xs"
+          />
+        )}
       </div>
 
       <button

@@ -1,12 +1,11 @@
 // Load and shape the pre-baked data files into the runtime structures the planner uses.
 //
 // Public surface:
-//   loadDataset() -> { routes, patterns, stops, stopsByRoute, routesByStop, meta }
+//   loadDataset() -> { routes, patterns, stops, stopsByRoute, meta }
 //     routes:        { rt: { name, gtfs, patternIds: [pid] } }
 //     patterns:      { pid: { pid, direction, lengthFt, points: [...], stops: [{stopId,stopName,lat,lon,pdist,seq}], rt } }
 //     stops:         { stopId: { stopId, stopName, lat, lon, routes: Set<rt> } }
 //     stopsByRoute:  { rt: Set<stopId> }
-//     routesByStop:  { stopId: Set<rt> }  (alias to stops[id].routes; kept for clarity at call sites)
 
 let cached = null;
 
@@ -65,7 +64,7 @@ export function shapeDataset({ routes, routePatterns, patternList, meta = null }
     }
   }
 
-  return { routes, patterns, stops, stopsByRoute, routesByStop: stops, meta };
+  return { routes, patterns, stops, stopsByRoute, meta };
 }
 
 export async function loadDataset(base = `${import.meta.env.BASE_URL}data`) {

@@ -144,7 +144,7 @@ function startGeoJSON(start) {
   };
 }
 
-export default function TripMap({ plan, routes, start, end, onMapClick, mapClickMode }) {
+export default function TripMap({ plan, routes, start, end, onMapClick, mapClickMode, heatmap }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
 
@@ -162,6 +162,23 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
     map.on('load', () => {
+      map.addSource('heatmap', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      // Coverage heatmap goes under everything else so leg polylines stay on top.
+      map.addLayer({
+        id: 'heatmap-fill',
+        type: 'fill',
+        source: 'heatmap',
+        paint: {
+          // Violet, opacity scaled by fraction-unridden. fraction 1.0 -> 0.5 alpha;
+          // fraction 0.0 cells aren't emitted at all.
+          'fill-color': '#a855f7',
+          'fill-opacity': ['*', ['get', 'frac'], 0.5],
+          'fill-outline-color': 'rgba(0,0,0,0)',
+        },
+      });
       map.addSource('legs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('walks', {
         type: 'geojson',
@@ -347,6 +364,7 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
     const apply = () => {
       map.getSource('startpt')?.setData(startGeoJSON(start));
       map.getSource('endpt')?.setData(startGeoJSON(end));
+      map.getSource('heatmap')?.setData(heatmap ?? { type: 'FeatureCollection', features: [] });
       if (plan) {
         map.getSource('legs')?.setData(legGeoJSON(plan, routes));
         map.getSource('walks')?.setData(walkGeoJSON(plan));
@@ -393,7 +411,7 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
     // and gets stuck waiting for an event that's never coming again.
     if (map.getSource('legs')) apply();
     else map.once('load', apply);
-  }, [plan, start, end, routes]);
+  }, [plan, start, end, routes, heatmap]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

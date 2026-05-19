@@ -36,6 +36,10 @@ export default defineConfig(({ command }) => ({
         // The bundled patterns.json is ~6 MB before gzip; bump the precache
         // ceiling so it gets included rather than silently skipped.
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        // Per-pattern files under data/patterns/ are legacy — runtime only
+        // fetches the bundled data/patterns.json. Skip them so the install
+        // doesn't ship ~6 MB of duplicate data.
+        globIgnores: ['**/data/patterns/**'],
         // CARTO basemap tiles — cache successful responses so the map keeps
         // working offline once the user has panned around. NetworkFirst with
         // a fallback to cache means online users always get fresh tiles.
