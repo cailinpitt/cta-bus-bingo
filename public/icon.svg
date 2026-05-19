@@ -13,13 +13,16 @@
 
   <rect width="512" height="512" rx="96" fill="url(#bg)"/>
 
-  <!-- Chained route — same motif as the OG card but stacked for a square. -->
-  <path d="M 80 130 Q 200 80, 320 160 T 432 280 Q 380 360, 240 360 T 80 432"
-        stroke="url(#route)" stroke-width="28" fill="none"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Chained route — same motif as the OG card but stacked for a square.
+       Group is translated so the artwork's bounding box centers on the canvas. -->
+  <g transform="translate(5 -25)">
+    <path d="M 80 130 Q 200 80, 320 160 T 432 280 Q 380 360, 240 360 T 80 432"
+          stroke="url(#route)" stroke-width="28" fill="none"
+          stroke-linecap="round" stroke-linejoin="round"/>
 
-  <circle cx="80"  cy="130" r="32" fill="#facc15" stroke="#0d1117" stroke-width="6"/>
-  <circle cx="320" cy="160" r="22" fill="#34d399" stroke="#0d1117" stroke-width="6"/>
-  <circle cx="432" cy="280" r="22" fill="#f97316" stroke="#0d1117" stroke-width="6"/>
-  <circle cx="80"  cy="432" r="32" fill="#ef4444" stroke="#ffffff" stroke-width="6"/>
+    <circle cx="80"  cy="130" r="32" fill="#facc15" stroke="#0d1117" stroke-width="6"/>
+    <circle cx="320" cy="160" r="22" fill="#34d399" stroke="#0d1117" stroke-width="6"/>
+    <circle cx="432" cy="280" r="22" fill="#f97316" stroke="#0d1117" stroke-width="6"/>
+    <circle cx="80"  cy="432" r="32" fill="#ef4444" stroke="#ffffff" stroke-width="6"/>
+  </g>
 </svg>
