@@ -192,7 +192,11 @@ describe('bridge phase picks ridden buses to close the last mile', () => {
   });
 
   it('also reaches with scheduleMode=now (the app default)', { timeout: 30000 }, () => {
-    // Mirrors the browser default: 'now' + real current time.
+    // Pinned to a known-good weekday afternoon (Tue 2pm Chicago) so the test
+    // doesn't go flaky when CI runs in the middle of the night and 'now' mode
+    // legitimately finds no service near the start/end. The thing under test
+    // is the 'now' scheduleMode path, not the wall-clock moment of CI.
+    const now = new Date('2025-11-04T14:00:00-06:00');
     let runs = 0;
     let violations = 0;
     let reached = 0;
@@ -205,7 +209,7 @@ describe('bridge phase picks ridden buses to close the last mile', () => {
         cap: 3,
         roundTrip: false,
         scheduleMode: 'now',
-        now: new Date(),
+        now,
         stopIndex,
       });
       if (trips.length === 0) continue;
