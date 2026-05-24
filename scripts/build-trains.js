@@ -9,11 +9,17 @@
 // the projected position onto the line's polyline.
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const EARTH_RADIUS_FT = 20902231; // Earth radius in feet
 
-// Match the canonical key in cta-insights/data/gtfs/index.json.
+// Vendored rail geometry — station coords + line polylines. Rail geometry is
+// effectively static, so a checked-in snapshot stays valid; schedules still
+// refresh from GTFS on every build.
+const TRAIN_DATA_DIR = resolve(dirname(fileURLToPath(import.meta.url)), 'data', 'train');
+
+// Match the canonical rail route_id in the GTFS index (route_type=1).
 const GTFS_KEY = {
   red: 'Red',
   blue: 'Blue',
@@ -132,7 +138,7 @@ function snapStation(station, line, cum) {
 // waypoint (type 'W').
 function buildPattern(lineCode, lineSegments, stations, reverse) {
   // Concatenate the multi-segment polyline into a single flat array.
-  // cta-insights stores some lines as arrays-of-segments to skip non-rail gaps
+  // Some lines are stored as arrays-of-segments to skip non-rail gaps
   // (e.g. Purple shuttle); we lose those gaps in pdist but it's close enough
   // for routing/rendering. (Could iterate to handle gaps later.)
   const flat = [];
@@ -182,16 +188,12 @@ function buildPattern(lineCode, lineSegments, stations, reverse) {
   return { lengthFt: total, points: merged };
 }
 
-export function buildTrains({ insightsRoot }) {
-  const stations = JSON.parse(
-    readFileSync(resolve(insightsRoot, 'src', 'train', 'data', 'trainStations.json'), 'utf8'),
-  );
-  const rawLines = JSON.parse(
-    readFileSync(resolve(insightsRoot, 'src', 'train', 'data', 'trainLines.json'), 'utf8'),
-  );
+export function buildTrains({ dataDir = TRAIN_DATA_DIR } = {}) {
+  const stations = JSON.parse(readFileSync(resolve(dataDir, 'trainStations.json'), 'utf8'));
+  const rawLines = JSON.parse(readFileSync(resolve(dataDir, 'trainLines.json'), 'utf8'));
 
-  // Some lines in cta-insights are stored as a flat array of [lat,lon] pairs;
-  // others as an array of segments. Normalize both to "array of segments".
+  // Some lines are stored as a flat array of [lat,lon] pairs; others as an
+  // array of segments. Normalize both to "array of segments".
   function asSegments(raw) {
     if (!raw.length) return [];
     if (Array.isArray(raw[0][0])) return raw;

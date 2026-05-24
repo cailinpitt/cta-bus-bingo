@@ -1,4 +1,4 @@
-// Schedule-awareness against the cta-insights GTFS index shape.
+// Schedule-awareness against the GTFS index shape.
 //
 // `gtfs` for a route looks like { "0": dirEntry, "1": dirEntry } where dirEntry has:
 //   headways:    { weekday: { "<hour>": minutes }, saturday: {...}, sunday: {...} }

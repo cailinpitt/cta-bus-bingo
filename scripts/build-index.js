@@ -5,41 +5,30 @@
 //   route-patterns.json    — { rt: [pid, pid, ...] }
 //   patterns/<pid>.json    — { pid, direction, lengthFt, points: [{seq,lat,lon,type,stopId,stopName,pdist}] }
 //
-// Source of truth:
-//   - cta-insights/data/gtfs/index.json supplies per-route headways + ride durations.
-//   - cta-insights/src/bus/routes.js supplies human-readable route names.
-//   - CTA Bus Tracker `getpatterns?rt=X` supplies pattern geometry (one call per route).
+// Source of truth (all self-contained):
+//   - scripts/build-gtfs-index.js downloads the public CTA GTFS feed and supplies
+//     per-route headways + ride durations + display names (keyless).
+//   - scripts/data/train/* supplies vendored rail station + line geometry.
+//   - CTA Bus Tracker `getpatterns?rt=X` supplies bus pattern geometry (one call
+//     per route, needs CTA_BUS_KEY).
 //
 // Re-run with: CTA_BUS_KEY=... npm run build-index
-// Reads CTA_BUS_KEY from cta-insights/.env if not in the current environment.
+// Reads CTA_BUS_KEY from this repo's own .env (via dotenv).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
+import { buildGtfsIndex } from './build-gtfs-index.js';
 import { buildTrains } from './build-trains.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const INSIGHTS = resolve(ROOT, '..', 'cta-insights');
 const OUT_DIR = resolve(ROOT, 'public', 'data');
 const OUT_PATTERNS = resolve(OUT_DIR, 'patterns');
 
-// Fall back to cta-insights' .env so the user doesn't have to duplicate the key.
 if (!process.env.CTA_BUS_KEY) {
-  const envPath = resolve(INSIGHTS, '.env');
-  if (existsSync(envPath)) {
-    for (const line of readFileSync(envPath, 'utf8').split('\n')) {
-      const m = line.match(/^CTA_BUS_KEY=(.+)$/);
-      if (m) {
-        process.env.CTA_BUS_KEY = m[1].trim();
-        break;
-      }
-    }
-  }
-}
-if (!process.env.CTA_BUS_KEY) {
-  console.error('CTA_BUS_KEY not set (looked at env and cta-insights/.env)');
+  console.error('CTA_BUS_KEY not set — add it to cta-bus-bingo/.env (see .env.example)');
   process.exit(1);
 }
 
@@ -74,28 +63,6 @@ async function getPatterns(rt) {
   }));
 }
 
-// Extract the `names` map from cta-insights without requiring it as a CJS module.
-function loadRouteNames() {
-  const src = readFileSync(resolve(INSIGHTS, 'src', 'bus', 'routes.js'), 'utf8');
-  const start = src.indexOf('const names = {');
-  if (start < 0) throw new Error('Could not find names map in cta-insights routes.js');
-  // Walk braces to find the matching close.
-  let depth = 0;
-  let i = src.indexOf('{', start);
-  const open = i;
-  for (; i < src.length; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}') {
-      depth--;
-      if (depth === 0) break;
-    }
-  }
-  const objSrc = src.slice(open, i + 1);
-  // Eval is safe here — input is our own checked-in source file.
-  // eslint-disable-next-line no-new-func
-  return new Function(`return ${objSrc};`)();
-}
-
 function ensureDir(p) {
   if (!existsSync(p)) mkdirSync(p, { recursive: true });
 }
@@ -104,17 +71,12 @@ async function main() {
   ensureDir(OUT_DIR);
   ensureDir(OUT_PATTERNS);
 
-  const gtfs = JSON.parse(readFileSync(resolve(INSIGHTS, 'data', 'gtfs', 'index.json'), 'utf8'));
-  const names = loadRouteNames();
+  console.log('building GTFS schedule index…');
+  const gtfs = await buildGtfsIndex();
+  const names = gtfs.names;
 
-  // Union: anything with a display name OR an entry in the GTFS index.
-  const allRoutes = Array.from(new Set([...Object.keys(names), ...Object.keys(gtfs.routes)]));
-  allRoutes.sort((a, b) => {
-    const na = parseInt(a, 10);
-    const nb = parseInt(b, 10);
-    if (na !== nb) return (Number.isNaN(na) ? 9999 : na) - (Number.isNaN(nb) ? 9999 : nb);
-    return a.localeCompare(b);
-  });
+  // Every bus route in the GTFS feed (route_type=3), schedule-indexed or not.
+  const allRoutes = gtfs.busRouteIds;
 
   const routes = {};
   const routePatterns = {};
@@ -138,8 +100,8 @@ async function main() {
 
     routes[rt] = {
       name: names[rt] || rt,
-      // Schedule shape inherited from cta-insights GTFS index (may be undefined for
-      // night/seasonal routes; the planner treats undefined as "not running").
+      // Schedule shape from the GTFS index (may be undefined for night/seasonal
+      // routes; the planner treats undefined as "not running").
       gtfs: gtfsEntry || null,
       patternIds: patterns.map((p) => String(p.pid)),
     };
@@ -159,10 +121,10 @@ async function main() {
     }
   }
 
-  // Trains: synthesize routes + patterns from cta-insights's train data files,
+  // Trains: synthesize routes + patterns from the vendored train data files,
   // then merge into the same `routes`/`patterns` outputs so the planner can
   // treat them as just-another-route family with isTrain=true.
-  const trains = buildTrains({ insightsRoot: INSIGHTS });
+  const trains = buildTrains();
   let trainStops = 0;
   for (const [rt, r] of Object.entries(trains.routes)) {
     const gtfsLine = gtfs.lines?.[r.gtfsLineKey] || null;
