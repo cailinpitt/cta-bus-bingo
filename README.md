@@ -50,16 +50,17 @@ How it works:
 
 ### Deploying the worker
 
-Requires a free Cloudflare account and `wrangler` (already a dev dependency). One-time:
+Requires a free Cloudflare account. The worker is its own package under `worker/` (wrangler lives there, not in the site's deps, so it's not installed on every site CI run). One-time, from the repo root:
 
 ```
-npx wrangler login                                        # browser OAuth
-npx wrangler kv namespace create SYNC -c worker/wrangler.toml
-# paste the printed id into worker/wrangler.toml under [[kv_namespaces]]
-npx wrangler deploy -c worker/wrangler.toml               # first deploy registers a *.workers.dev subdomain
+npm --prefix worker install
+cd worker
+npx wrangler login                     # browser OAuth
+npx wrangler kv namespace create SYNC  # paste the printed id into wrangler.toml under [[kv_namespaces]]
+npx wrangler deploy                    # first deploy registers a *.workers.dev subdomain
 ```
 
-Then set `VITE_SYNC_URL` in `.env` to the deployed `https://<worker>.<subdomain>.workers.dev` URL (see `.env.example`). The Sync panel only appears when `VITE_SYNC_URL` is set. CORS in `worker/src/index.js` is locked to the GitHub Pages origin plus `localhost`; update `ALLOWED_ORIGINS` if you deploy elsewhere.
+Then point the app at it: set `VITE_SYNC_URL` to the deployed `https://<worker>.<subdomain>.workers.dev` URL in `.env` for local dev (see `.env.example`), and in `.github/workflows/deploy.yml`'s build step for the deployed site (it's not a secret — it's baked into the public bundle). The Sync panel only appears when `VITE_SYNC_URL` is set. CORS in `worker/src/index.js` is locked to the GitHub Pages origin plus `localhost`; update `ALLOWED_ORIGINS` if you deploy elsewhere.
 
 ## Social card
 

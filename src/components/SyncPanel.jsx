@@ -1,10 +1,10 @@
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 
-// Cross-device sync controls. Before setup it's a one-button opt-in; after, it
-// shows status and a QR/link to pair another device. The QR encodes a deep link
-// (#sync=<key>) so a scanned device opens the app already configured — one scan,
-// then both devices converge automatically. See plan.md / src/lib/sync.js.
+// Cross-device sync controls. Before setup it's an opt-in (create a group or join
+// one by code); after, it shows status and a QR/link/code to pair another device.
+// The QR encodes a deep link (#sync=<key>) so a scanned device opens the app
+// already configured. See plan.md / src/lib/sync.js.
 
 function relativeTime(ts) {
   if (!ts) return '';
@@ -39,24 +39,24 @@ export default function SyncPanel({
   syncKey,
   onEnable,
   onJoin,
+  onRotate,
   onDisconnect,
 }) {
   const [showPair, setShowPair] = useState(false);
   const [qr, setQr] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinErr, setJoinErr] = useState('');
+  const [flash, setFlash] = useState('');
+  const [confirm, setConfirm] = useState(null); // 'disconnect' | 'rotate' | null
 
-  function submitJoin(e) {
-    e.preventDefault();
-    const code = joinCode.trim();
-    if (!KEY_RE.test(code)) {
-      setJoinErr("That doesn't look like a sync code.");
-      return;
-    }
-    setJoinErr('');
-    onJoin(code);
-  }
+  // Auto-clear the transient confirmation banner.
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(''), 2500);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   // Render the QR lazily, only while the pairing section is open.
   useEffect(() => {
@@ -77,13 +77,25 @@ export default function SyncPanel({
     };
   }, [showPair, deepLink]);
 
-  async function copyLink() {
+  function submitJoin(e) {
+    e.preventDefault();
+    const code = joinCode.trim();
+    if (!KEY_RE.test(code)) {
+      setJoinErr("That doesn't look like a sync code.");
+      return;
+    }
+    setJoinErr('');
+    setFlash('Joined ✓');
+    onJoin(code);
+  }
+
+  async function copy(text, setFlag) {
     try {
-      await navigator.clipboard.writeText(deepLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setFlag(true);
+      setTimeout(() => setFlag(false), 1500);
     } catch {
-      // clipboard blocked — the visible code/link is still there to copy by hand
+      // clipboard blocked — the visible value is still there to copy by hand
     }
   }
 
@@ -99,7 +111,10 @@ export default function SyncPanel({
         </p>
         <button
           type="button"
-          onClick={onEnable}
+          onClick={() => {
+            onEnable();
+            setShowPair(true);
+          }}
           className="w-full rounded bg-emerald-700 px-2 py-1.5 text-white text-xs hover:bg-emerald-600"
         >
           Set up sync
@@ -143,22 +158,53 @@ export default function SyncPanel({
         <span className={`text-xs ${label.cls}`}>{label.text}</span>
       </div>
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setShowPair((v) => !v)}
-          className="flex-1 rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border"
-        >
-          {showPair ? 'Hide pairing' : 'Add a device'}
-        </button>
-        <button
-          type="button"
-          onClick={onDisconnect}
-          className="rounded bg-gh-subtle px-2 py-1 text-gh-muted text-xs hover:text-white"
-        >
-          Disconnect
-        </button>
-      </div>
+      {flash && (
+        <div className="mb-2 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-emerald-200 text-xs">
+          {flash}
+        </div>
+      )}
+
+      {confirm === 'disconnect' ? (
+        <div className="flex items-center justify-between gap-2 rounded border border-gh-border px-2 py-1.5 text-xs">
+          <span className="text-gh-muted">Disconnect this device? Your routes stay on it.</span>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setConfirm(null);
+                onDisconnect();
+              }}
+              className="rounded bg-red-700 px-2 py-0.5 text-white hover:bg-red-600"
+            >
+              Disconnect
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirm(null)}
+              className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowPair((v) => !v)}
+            className="flex-1 rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border"
+          >
+            {showPair ? 'Hide pairing' : 'Add a device'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirm('disconnect')}
+            className="rounded bg-gh-subtle px-2 py-1 text-gh-muted text-xs hover:text-white"
+          >
+            Disconnect
+          </button>
+        </div>
+      )}
 
       {showPair && (
         <div className="mt-3 flex flex-col items-center gap-2 border-gh-border border-t pt-3">
@@ -181,17 +227,62 @@ export default function SyncPanel({
           )}
           <button
             type="button"
-            onClick={copyLink}
+            onClick={() => copy(deepLink, setLinkCopied)}
             className="w-full rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border"
           >
-            {copied ? 'Copied!' : 'Copy pairing link'}
+            {linkCopied ? 'Copied!' : 'Copy pairing link'}
           </button>
           <div className="w-full">
-            <div className="text-gh-muted text-[10px] uppercase tracking-wide">
-              Sync code (back this up to recover)
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-gh-muted text-[10px] uppercase tracking-wide">
+                Sync code (back this up to recover)
+              </span>
+              <button
+                type="button"
+                onClick={() => copy(syncKey, setCodeCopied)}
+                className="shrink-0 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] text-white hover:bg-gh-border"
+              >
+                {codeCopied ? 'Copied!' : 'Copy'}
+              </button>
             </div>
             <code className="block break-all text-white/80 text-xs">{syncKey}</code>
           </div>
+
+          {confirm === 'rotate' ? (
+            <div className="w-full rounded border border-amber-700/50 bg-amber-900/20 px-2 py-1.5 text-amber-200 text-xs">
+              <p className="mb-1">
+                Make a new code? Your routes carry over, but other devices must re-pair with the new
+                code.
+              </p>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirm(null);
+                    onRotate();
+                  }}
+                  className="rounded bg-amber-700 px-2 py-0.5 text-white hover:bg-amber-600"
+                >
+                  Rotate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirm(null)}
+                  className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted hover:text-white"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirm('rotate')}
+              className="text-gh-muted text-[11px] underline hover:text-white"
+            >
+              Rotate sync key
+            </button>
+          )}
         </div>
       )}
     </div>

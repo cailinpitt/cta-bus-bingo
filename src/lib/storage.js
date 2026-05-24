@@ -9,6 +9,10 @@ const DOC_KEY = 'cta-bus-bingo:doc';
 const LEGACY_KEY = 'cta-bus-bingo:ridden';
 const SYNC_KEY = 'cta-bus-bingo:syncKey';
 
+// Exposed so App can react to cross-tab `storage` events (another tab of the
+// same browser editing the doc or sync key).
+export const STORAGE_KEYS = { doc: DOC_KEY, syncKey: SYNC_KEY };
+
 // Load the sync doc, migrating the legacy ridden-array if no doc exists yet.
 // Returns an empty doc on any failure (private-mode Safari, corrupt JSON, etc.).
 export function loadDoc() {

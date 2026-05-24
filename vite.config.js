@@ -8,7 +8,12 @@ export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' + the useRegisterSW hook in UpdateToast.jsx surfaces a visible
+      // "Reload" instead of updating silently (which on iOS PWAs required a
+      // force-quit to notice). injectRegister:false so the hook is the sole
+      // registrant (no duplicate auto-injected registration).
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: [
         'favicon-32.png',
         'favicon-48.png',

@@ -10,7 +10,14 @@ import TripPicker from './components/TripPicker.jsx';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
 import { buildStopIndex, stopsNear } from './lib/spatial.js';
-import { clearSyncKey, loadDoc, loadSyncKey, saveDoc, saveSyncKey } from './lib/storage.js';
+import {
+  clearSyncKey,
+  loadDoc,
+  loadSyncKey,
+  STORAGE_KEYS,
+  saveDoc,
+  saveSyncKey,
+} from './lib/storage.js';
 import { createSyncEngine, fetchTransport, generateSyncKey } from './lib/sync.js';
 import { applyDelta, docToSet } from './lib/syncDoc.js';
 import { readSyncKey, readUrlState, writeUrlState } from './lib/urlState.js';
@@ -94,6 +101,27 @@ export default function App() {
     setSyncKey(code);
     syncRef.current?.start();
   }
+
+  // Rotate to a fresh key (e.g. the old one leaked). start() pushes the local
+  // doc into the new key's slot, so your routes carry over; other devices must
+  // re-pair with the new code. The old key's KV doc is simply abandoned.
+  function rotateSync() {
+    const key = generateSyncKey();
+    saveSyncKey(key);
+    setSyncKey(key);
+    syncRef.current?.start();
+  }
+
+  // Reflect edits made in another tab of the same browser: localStorage is
+  // shared, but each tab's React state isn't, so mirror doc/key changes here.
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key === null || e.key === STORAGE_KEYS.doc) setDoc(loadDoc());
+      if (e.key === null || e.key === STORAGE_KEYS.syncKey) setSyncKey(loadSyncKey());
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   function disconnectSync() {
     clearSyncKey();
@@ -566,6 +594,7 @@ export default function App() {
                   syncKey={syncKey}
                   onEnable={enableSync}
                   onJoin={joinSync}
+                  onRotate={rotateSync}
                   onDisconnect={disconnectSync}
                 />
               )}
