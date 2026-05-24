@@ -78,7 +78,7 @@ function legGeoJSON(plan, routes) {
   return { type: 'FeatureCollection', features };
 }
 
-function walkGeoJSON(plan) {
+function walkGeoJSON(plan, end) {
   const features = [];
   // Start -> first board
   if (plan.legs[0]) {
@@ -104,6 +104,22 @@ function walkGeoJSON(plan) {
         coordinates: [
           [a.lon, a.lat],
           [b.lon, b.lat],
+        ],
+      },
+    });
+  }
+  // Last alight -> destination. Mirrors the start->first-board walk so the
+  // final leg of the journey (off the bus, on foot to the goal) is visible.
+  const lastLeg = plan.legs[plan.legs.length - 1];
+  if (end && lastLeg) {
+    const a = lastLeg.alightStop;
+    features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [a.lon, a.lat],
+          [end.lon, end.lat],
         ],
       },
     });
@@ -367,7 +383,7 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
       map.getSource('heatmap')?.setData(heatmap ?? { type: 'FeatureCollection', features: [] });
       if (plan) {
         map.getSource('legs')?.setData(legGeoJSON(plan, routes));
-        map.getSource('walks')?.setData(walkGeoJSON(plan));
+        map.getSource('walks')?.setData(walkGeoJSON(plan, end));
         map.getSource('stops')?.setData(stopGeoJSON(plan, routes));
 
         // Fit to plan bounds.
