@@ -36,7 +36,30 @@ Lint: `npm run lint` · Tests: `npm test` · Smoke planner: `node scripts/smoke-
 
 ## What "ridden" means here
 
-A simple checklist in localStorage. Click a route to toggle. Export/import the JSON to back it up across browsers.
+A simple checklist stored in localStorage. Click a route to toggle. Export/import the JSON to back it up, or turn on **device sync** (below) to keep it in step across your phone and computer automatically.
+
+## Sync across devices
+
+Optional. Keeps the ridden-routes set converged across devices with no account — set it up on one device, scan a QR (or open the pairing link) on the others, and from then on they stay in sync.
+
+How it works:
+
+- The ridden set is stored as an **LWW-Map** (last-writer-wins per route) in `src/lib/syncDoc.js` — `{ routes: { [rt]: { r, t } } }`, where un-marking a route leaves a tombstone (`r:0`) so removals propagate instead of getting resurrected on merge. The merge is a convergent CRDT join (commutative/associative/idempotent), so devices converge with no locking.
+- A tiny **Cloudflare Worker + KV** (`worker/`) is a dumb blob store: `GET`/`PUT` one JSON doc per random key. The client owns the merge (`src/lib/sync.js`: `GET → merge → PUT`, single-flight + debounced, re-syncing on load / tab focus / a slow poll).
+- The **sync key** is an unguessable 128-bit bearer capability addressing exactly one document — no auth. It lives in localStorage and travels via the QR's `#sync=<key>` deep link. Back it up (shown in the Sync panel) to add or recover devices.
+
+### Deploying the worker
+
+Requires a free Cloudflare account and `wrangler` (already a dev dependency). One-time:
+
+```
+npx wrangler login                                        # browser OAuth
+npx wrangler kv namespace create SYNC -c worker/wrangler.toml
+# paste the printed id into worker/wrangler.toml under [[kv_namespaces]]
+npx wrangler deploy -c worker/wrangler.toml               # first deploy registers a *.workers.dev subdomain
+```
+
+Then set `VITE_SYNC_URL` in `.env` to the deployed `https://<worker>.<subdomain>.workers.dev` URL (see `.env.example`). The Sync panel only appears when `VITE_SYNC_URL` is set. CORS in `worker/src/index.js` is locked to the GitHub Pages origin plus `localhost`; update `ALLOWED_ORIGINS` if you deploy elsewhere.
 
 ## Social card
 

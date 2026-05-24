@@ -4,22 +4,94 @@ import Itinerary from './components/Itinerary.jsx';
 import ProgressPanel from './components/ProgressPanel.jsx';
 import RiddenList from './components/RiddenList.jsx';
 import StartPicker from './components/StartPicker.jsx';
+import SyncPanel from './components/SyncPanel.jsx';
 import TripMap from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
 import { buildStopIndex, stopsNear } from './lib/spatial.js';
-import { loadRidden, saveRidden } from './lib/storage.js';
-import { readUrlState, writeUrlState } from './lib/urlState.js';
+import { clearSyncKey, loadDoc, loadSyncKey, saveDoc, saveSyncKey } from './lib/storage.js';
+import { createSyncEngine, fetchTransport, generateSyncKey } from './lib/sync.js';
+import { applyDelta, docToSet } from './lib/syncDoc.js';
+import { readSyncKey, readUrlState, writeUrlState } from './lib/urlState.js';
 
 const initialUrl = readUrlState();
+// A sync key carried in a #sync= deep link (a freshly-scanned device). Captured
+// at module load, before writeUrlState strips it from the hash.
+const initialSyncKey = readSyncKey();
 
 export default function App() {
   const [dataset, setDataset] = useState(null);
   const [loadErr, setLoadErr] = useState(null);
   const [start, setStart] = useState(initialUrl.start ?? null);
   const [end, setEnd] = useState(initialUrl.end ?? null);
-  const [ridden, setRiddenState] = useState(() => loadRidden());
+  // The ridden set is backed by a sync doc (LWW-Map) in localStorage so it can
+  // converge across devices. The doc is the source of truth; `ridden` is the
+  // derived Set the rest of the app consumes.
+  const [doc, setDoc] = useState(loadDoc);
+  const ridden = useMemo(() => docToSet(doc), [doc]);
+
+  // Keep a ref to the latest doc so the long-lived sync engine (created once)
+  // always reads current state instead of closing over a stale doc.
+  const docRef = useRef(doc);
+  docRef.current = doc;
+
+  // The cross-device sync engine. Built once, only when a worker URL is
+  // configured; it stays a no-op until a sync key exists (set via the UI in a
+  // later step), so there's no network activity for users who haven't paired.
+  const [syncKey, setSyncKey] = useState(() => loadSyncKey());
+  const [syncStatus, setSyncStatus] = useState(() => ({
+    state: loadSyncKey() ? 'idle' : 'disabled',
+  }));
+
+  const syncRef = useRef(null);
+  if (syncRef.current === null && import.meta.env.VITE_SYNC_URL) {
+    syncRef.current = createSyncEngine({
+      baseUrl: import.meta.env.VITE_SYNC_URL,
+      getKey: () => loadSyncKey(),
+      getLocalDoc: () => docRef.current,
+      onMergedDoc: (merged) => {
+        setDoc(merged);
+        saveDoc(merged);
+      },
+      onStatus: setSyncStatus,
+      transport: fetchTransport,
+    });
+  }
+
+  // Start the engine on mount. If we arrived via a #sync= deep link, persist
+  // that key first so start() picks it up and merges this device into the group.
+  useEffect(() => {
+    const engine = syncRef.current;
+    if (!engine) return;
+    if (initialSyncKey) {
+      saveSyncKey(initialSyncKey);
+      setSyncKey(initialSyncKey);
+    }
+    engine.start();
+    return () => engine.stop();
+  }, []);
+
+  // Pairing link the QR encodes: the current page URL with the key in the hash,
+  // so scanning opens this same deployment already configured.
+  const syncDeepLink = useMemo(() => {
+    if (!syncKey || typeof window === 'undefined') return null;
+    return `${window.location.origin}${window.location.pathname}#sync=${syncKey}`;
+  }, [syncKey]);
+
+  function enableSync() {
+    const key = loadSyncKey() ?? generateSyncKey();
+    saveSyncKey(key);
+    setSyncKey(key);
+    syncRef.current?.start();
+  }
+
+  function disconnectSync() {
+    clearSyncKey();
+    setSyncKey(null);
+    syncRef.current?.stop();
+    setSyncStatus({ state: 'disabled' });
+  }
   const [cap, setCap] = useState(initialUrl.cap ?? 3);
   const [roundTrip, setRoundTripState] = useState(initialUrl.roundTrip ?? false);
   const [scheduleMode, setScheduleMode] = useState(initialUrl.scheduleMode ?? 'now');
@@ -69,9 +141,17 @@ export default function App() {
     handlePlan();
   }, [dataset]);
 
+  // Translate a full next-Set from the UI into timestamped LWW-Map updates:
+  // routes newly present become { r:1 }, routes dropped become { r:0 } tombstones
+  // so removals propagate across devices instead of getting resurrected on merge.
   function setRidden(next) {
-    setRiddenState(next);
-    saveRidden(next);
+    const added = [...next].filter((rt) => !ridden.has(rt));
+    const removed = [...ridden].filter((rt) => !next.has(rt));
+    if (added.length === 0 && removed.length === 0) return;
+    const nextDoc = applyDelta(doc, added, removed, Date.now());
+    setDoc(nextDoc);
+    saveDoc(nextDoc);
+    syncRef.current?.scheduleSync();
   }
 
   function handlePickStart(p) {
@@ -469,6 +549,16 @@ export default function App() {
                 heatmapOn={heatmapOn}
                 setHeatmapOn={setHeatmapOn}
               />
+              {import.meta.env.VITE_SYNC_URL && (
+                <SyncPanel
+                  enabled={!!syncKey}
+                  status={syncStatus}
+                  deepLink={syncDeepLink}
+                  syncKey={syncKey}
+                  onEnable={enableSync}
+                  onDisconnect={disconnectSync}
+                />
+              )}
               <RiddenList routes={dataset.routes} ridden={ridden} setRidden={setRidden} />
             </>
           )}

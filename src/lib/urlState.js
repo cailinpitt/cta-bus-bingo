@@ -24,6 +24,19 @@ function decodePoint(s) {
   return { lat, lon, label };
 }
 
+// The cross-device sync key, if the hash carries one (#sync=<key>). Used to
+// bootstrap a freshly-scanned device. Validated against the worker's key format
+// so a malformed value is ignored. writeUrlState rebuilds the hash from the
+// known planning params (omitting `sync`), so the key is stripped from the URL
+// automatically on the first state write after load.
+export function readSyncKey() {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#/, '');
+  if (!hash) return null;
+  const key = new URLSearchParams(hash).get('sync');
+  return key && /^[A-Za-z0-9_-]{22,43}$/.test(key) ? key : null;
+}
+
 export function readUrlState() {
   if (typeof window === 'undefined') return {};
   const hash = window.location.hash.replace(/^#/, '');

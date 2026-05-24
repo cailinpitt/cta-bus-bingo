@@ -1,0 +1,7 @@
+name = "cta-bus-bingo-sync"
+main = "src/index.js"
+compatibility_date = "2026-05-24"
+
+[[kv_namespaces]]
+binding = "SYNC"
+id = "2d180b81071a48fd95fe1b900fa4d770"
