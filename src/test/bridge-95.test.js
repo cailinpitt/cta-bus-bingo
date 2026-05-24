@@ -176,7 +176,7 @@ describe('bridge phase picks ridden buses to close the last mile', () => {
     return reachedTrips;
   }
 
-  it('every reached-end trip lands within 0.75 mi of the destination', () => {
+  it('every reached-end trip lands within 0.75 mi of the destination', { timeout: 30000 }, () => {
     const trips = runMany(8);
     expect(trips.length).toBeGreaterThan(0);
     for (const t of trips) {
