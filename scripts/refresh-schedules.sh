@@ -22,6 +22,12 @@
 
 set -euo pipefail
 
+# Strip ANSI color from tool output — this runs unattended into a log file, and
+# vitest/biome/npm otherwise emit escape codes that render as noise (␛[31m…).
+# NO_COLOR is the cross-tool standard; FORCE_COLOR=0 covers the stragglers.
+export NO_COLOR=1
+export FORCE_COLOR=0
+
 log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
