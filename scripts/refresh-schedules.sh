@@ -65,9 +65,12 @@ if [ -z "$CHANGES" ]; then
 fi
 
 # Real changes — commit everything including the refreshed meta timestamp.
+# Attribute to the cta-bot identity (per-commit, so manual commits in this repo
+# still use your real identity) — matches the cta-insights data pipeline.
 log "schedule changed — committing + pushing…"
 git add -A public/data
-git commit -m "Refresh schedule data ($(date '+%Y-%m-%d'))"
+git -c user.name="cta-bot" -c user.email="cta-bot@users.noreply.github.com" \
+  commit -m "Refresh schedule data ($(date '+%Y-%m-%d'))"
 git push
 
 log "=== schedule refresh done — deploy workflow will pick up the push ==="
