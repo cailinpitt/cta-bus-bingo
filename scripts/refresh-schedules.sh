@@ -46,15 +46,20 @@ npm test -- --run
 log "running lint…"
 npm run lint
 
-# 4. Commit + push only if the data actually changed. --porcelain catches
-#    modified, added, and removed pattern files; -A stages deletions too.
-if [ -z "$(git status --porcelain -- public/data)" ]; then
-  log "no data changes — nothing to deploy."
+# 4. Commit + push only if the *schedule* actually changed. meta.json's
+#    generatedAt timestamp bumps on every build, so it's excluded from the
+#    check — otherwise every run would deploy even when nothing changed. The
+#    --porcelain check catches modified, added, and removed pattern files.
+CHANGES="$(git status --porcelain -- public/data ':(exclude)public/data/meta.json')"
+if [ -z "$CHANGES" ]; then
+  log "no schedule changes — discarding meta timestamp churn, nothing to deploy."
+  git checkout -- public/data/meta.json 2>/dev/null || true
   log "=== schedule refresh done (no-op) ==="
   exit 0
 fi
 
-log "data changed — committing + pushing…"
+# Real changes — commit everything including the refreshed meta timestamp.
+log "schedule changed — committing + pushing…"
 git add -A public/data
 git commit -m "Refresh schedule data ($(date '+%Y-%m-%d'))"
 git push
