@@ -332,8 +332,11 @@ export default function App() {
   const meta = dataset?.meta;
   const gtfsAge = useMemo(() => {
     if (!meta?.gtfsGeneratedAt) return null;
-    const days = Math.round((Date.now() - meta.gtfsGeneratedAt) / 86400000);
-    return `${days}d old`;
+    const mins = Math.floor((Date.now() - meta.gtfsGeneratedAt) / 60000);
+    if (mins < 60) return `${mins}m old`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h old`;
+    return `${Math.floor(hours / 24)}d old`;
   }, [meta]);
 
   // The Itinerary component still accepts a single plan; map the selected
