@@ -1,0 +1,17 @@
+# Refresh CTA schedule data weekly and push it so the live site redeploys.
+#
+# scripts/refresh-schedules.sh rebuilds public/data from the CTA GTFS feed +
+# bus pattern geometry, runs tests + lint, and commits/pushes only if the data
+# changed — which triggers the GitHub Pages deploy workflow. GTFS only changes
+# on CTA service-change days, so weekly (Mondays 04:15) is plenty.
+#
+# Logs go to cron/refresh-schedules.log (gitignored).
+#
+# ⚠️  `crontab cron/crontab.txt` REPLACES every cron job for the user. This
+# server already runs the cta-insights crontab, so DO NOT install that way.
+# Append this one line instead (idempotent — re-running replaces the old line):
+#
+#   ( crontab -l 2>/dev/null | grep -v 'cta-bus-bingo/scripts/refresh-schedules.sh'; \
+#     grep -v '^#' $HOME/Development/cta-bus-bingo/cron/crontab.txt ) | crontab -
+
+15 4 * * 1 $HOME/Development/cta-bus-bingo/scripts/refresh-schedules.sh >> $HOME/Development/cta-bus-bingo/cron/refresh-schedules.log 2>&1

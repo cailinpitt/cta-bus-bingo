@@ -18,7 +18,11 @@ The data layer is built offline from CTA's bustime API and the GTFS schedule fee
 CTA_BUS_KEY=... npm run build-index
 ```
 
-This writes `public/data/{routes.json, route-patterns.json, patterns/*.json}`. After it runs, the app is fully offline / static.
+This writes `public/data/{routes.json, route-patterns.json, patterns/*.json}`. After it runs, the app is fully offline / static. Set `CTA_BUS_KEY` in `.env` (see `.env.example`) so you don't have to pass it each time; the GTFS schedule download itself needs no key.
+
+### Automated refresh
+
+`scripts/refresh-schedules.sh` rebuilds the data, runs tests + lint, and commits/pushes `public/data` only if it changed — which triggers the deploy workflow. `cron/crontab.txt` has the ready-to-install weekly entry plus a safe-append one-liner (so it won't clobber other cron jobs).
 
 ## Dev
 
