@@ -50,6 +50,14 @@ const MIN_BRIDGE_RIDE_FT = 5280; // 1 mi — don't board a bus for a sub-mile br
 const BRIDGE_TIME_PENALTY_PER_SEC = 3.28; // ft of progress required per sec of travel
 const MIN_RIDE_FT = 5280; // 1 mile — hard floor on unridden leg length
 const BACKTRACK_FT = 1000; // alight must be at least this far from a prior leg stop
+// Transfer refinement: after the greedy chain is built, slide each internal
+// transfer's alight (earlier leg) and board (later leg) within a small window
+// to shorten the connecting walk. The greedy scorer picks alights by how many
+// routes cluster nearby, not by the realized transfer to the route it actually
+// boards next — so it often alights a stop early into a walk, or rides past the
+// natural transfer point. This corrects that without changing route choices.
+const REFINE_WINDOW = 3; // stops to slide in either direction
+const REFINE_WALK_WEIGHT = 2; // walking costs 2x ride time in the transfer objective
 const SUGGEST_MAX_FT = 10000; // ~1.9 mi — fallback start search radius
 const MAX_FREE_RIDE_FT = 5280 * 5; // ~5 miles on a free connector
 const FREE_RIDE_MIN_FT = 2000; // skip tiny free hops — barely worth the wait
@@ -201,6 +209,109 @@ function legTimeSeconds({ pattern, boardIdx, alightIdx }, gtfs, now) {
   const headwayMin = headwayMinutes(gtfs, now) ?? 8;
   const waitMin = headwayMin / 2;
   return (rideMin + waitMin) * 60;
+}
+
+// Slide each internal transfer's alight (earlier leg) and board (later leg)
+// within REFINE_WINDOW stops to minimize the connecting walk, biased to avoid
+// walking (REFINE_WALK_WEIGHT). Each transfer is independent: a leg's board is
+// the downstream variable of the prior transfer and its alight the upstream
+// variable of the next, so the two never collide. Anchors stay fixed — the
+// earlier leg's board and the later leg's alight don't move — which is why the
+// final leg's alight (round-trip / reachedEnd binding) is never touched.
+//
+// Run before the bridge phase, on the unridden chain (plus any interspersed
+// free connectors). `priorBeforeChain` lets callers pass stops to keep alights
+// from backtracking onto (unused today; chain-internal priors are derived).
+function refineTransfers(chain, dataset, now, priorBeforeChain = []) {
+  const { routes } = dataset;
+  const floorFt = (leg) => (leg.free ? FREE_RIDE_MIN_FT : MIN_RIDE_FT);
+
+  for (let i = 0; i < chain.length - 1; i++) {
+    const earlier = chain[i];
+    const later = chain[i + 1];
+    const pe = earlier.pattern;
+    const pl = later.pattern;
+    if (!pe || !pl) continue;
+    const eGtfs = routes[earlier.rt]?.gtfs;
+    const lGtfs = routes[later.rt]?.gtfs;
+
+    // Earlier leg slides its alight; later leg slides its board. Keep each ride
+    // within range and >= its floor.
+    const aLo = Math.max(earlier.boardIdx + 1, earlier.alightIdx - REFINE_WINDOW);
+    const aHi = Math.min(pe.stops.length - 1, earlier.alightIdx + REFINE_WINDOW);
+    const bLo = Math.max(0, later.boardIdx - REFINE_WINDOW);
+    const bHi = Math.min(later.alightIdx - 1, later.boardIdx + REFINE_WINDOW);
+
+    // Backtrack guard: alight must stay >= BACKTRACK_FT from every stop on
+    // legs strictly before `earlier`, plus the earlier leg's own board.
+    const priors = [...priorBeforeChain];
+    for (let k = 0; k < i; k++) priors.push(chain[k].boardStop, chain[k].alightStop);
+    priors.push(earlier.boardStop);
+
+    const eBoardPdist = pe.stops[earlier.boardIdx].pdist;
+    const lAlightPdist = pl.stops[later.alightIdx].pdist;
+
+    let best = null;
+    for (let ai = aLo; ai <= aHi; ai++) {
+      const aStop = pe.stops[ai];
+      const eRideFt = aStop.pdist - eBoardPdist;
+      if (eRideFt < floorFt(earlier)) continue;
+      let backtrack = false;
+      for (const p of priors) {
+        if (haversineFeet(aStop, p) < BACKTRACK_FT) {
+          backtrack = true;
+          break;
+        }
+      }
+      if (backtrack) continue;
+      const eRideSec = legTimeSeconds(
+        { pattern: pe, boardIdx: earlier.boardIdx, alightIdx: ai },
+        eGtfs,
+        now,
+      );
+      for (let bi = bLo; bi <= bHi; bi++) {
+        const bStop = pl.stops[bi];
+        const lRideFt = lAlightPdist - bStop.pdist;
+        if (lRideFt < floorFt(later)) continue;
+        const walkFt = haversineFeet(aStop, bStop);
+        const walkSec = walkSeconds(walkFt);
+        const lRideSec = legTimeSeconds(
+          { pattern: pl, boardIdx: bi, alightIdx: later.alightIdx },
+          lGtfs,
+          now,
+        );
+        const cost = REFINE_WALK_WEIGHT * walkSec + eRideSec + lRideSec;
+        if (!best || cost < best.cost) {
+          best = {
+            cost,
+            ai,
+            bi,
+            aStop,
+            bStop,
+            eRideFt,
+            eRideSec,
+            lRideFt,
+            lRideSec,
+            walkFt,
+            walkSec,
+          };
+        }
+      }
+    }
+    if (!best) continue;
+
+    earlier.alightIdx = best.ai;
+    earlier.alightStop = best.aStop;
+    earlier.rideFt = best.eRideFt;
+    earlier.rideSeconds = best.eRideSec;
+
+    later.boardIdx = best.bi;
+    later.boardStop = best.bStop;
+    later.rideFt = best.lRideFt;
+    later.rideSeconds = best.lRideSec;
+    later.walkFeet = best.walkFt;
+    later.walkSeconds = best.walkSec;
+  }
 }
 
 // Precompute, for each stop, a Map<rt, minDistFt> of every bus route reachable
@@ -396,6 +507,12 @@ function runOnePlan({
     position = best.alightStop;
     currentStopId = best.alightStop.stopId;
   }
+
+  // Refine transfer points along the chain before bridging — shortens the
+  // walk between consecutive legs by riding a stop or two further (or less).
+  // Never moves the last leg's alight, so `position` stays valid for the
+  // bridge phase and the round-trip binding below is unaffected.
+  refineTransfers(chain, dataset, now);
 
   // Bridge to destination: if `end` is set and the chain didn't land near it,
   // append free legs (trains + already-ridden buses, including this trip's own
