@@ -30,10 +30,33 @@ function statusLabel(status) {
   }
 }
 
-export default function SyncPanel({ enabled, status, deepLink, syncKey, onEnable, onDisconnect }) {
+const KEY_RE = /^[A-Za-z0-9_-]{22,43}$/;
+
+export default function SyncPanel({
+  enabled,
+  status,
+  deepLink,
+  syncKey,
+  onEnable,
+  onJoin,
+  onDisconnect,
+}) {
   const [showPair, setShowPair] = useState(false);
   const [qr, setQr] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinErr, setJoinErr] = useState('');
+
+  function submitJoin(e) {
+    e.preventDefault();
+    const code = joinCode.trim();
+    if (!KEY_RE.test(code)) {
+      setJoinErr("That doesn't look like a sync code.");
+      return;
+    }
+    setJoinErr('');
+    onJoin(code);
+  }
 
   // Render the QR lazily, only while the pairing section is open.
   useEffect(() => {
@@ -72,7 +95,7 @@ export default function SyncPanel({ enabled, status, deepLink, syncKey, onEnable
         </div>
         <p className="mb-2 text-gh-muted text-xs">
           Keep your ridden routes in sync between your phone and computer. Set it up on one device,
-          then scan a QR code on the others — no account, just one scan each.
+          then scan a QR code (or paste the sync code) on the others — no account needed.
         </p>
         <button
           type="button"
@@ -81,6 +104,33 @@ export default function SyncPanel({ enabled, status, deepLink, syncKey, onEnable
         >
           Set up sync
         </button>
+        <div className="my-2 text-center text-[10px] text-gh-muted/60 uppercase tracking-wide">
+          or
+        </div>
+        <form onSubmit={submitJoin} className="flex flex-col gap-1">
+          <span className="text-[10px] text-gh-muted uppercase tracking-wide">
+            Join with a sync code
+          </span>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value)}
+              placeholder="paste sync code"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded bg-gh-canvas px-2 py-1 text-white text-xs placeholder:text-gh-muted/50"
+            />
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-2 py-1 text-white text-xs hover:bg-blue-500"
+            >
+              Join
+            </button>
+          </div>
+          {joinErr && <div className="text-[11px] text-amber-300">{joinErr}</div>}
+        </form>
       </div>
     );
   }

@@ -86,6 +86,15 @@ export default function App() {
     syncRef.current?.start();
   }
 
+  // Join an existing sync group by entering its code — the path for contexts that
+  // can't receive the #sync= deep link, notably an iOS home-screen PWA (its
+  // storage is sandboxed from Safari). Local marks merge into the group.
+  function joinSync(code) {
+    saveSyncKey(code);
+    setSyncKey(code);
+    syncRef.current?.start();
+  }
+
   function disconnectSync() {
     clearSyncKey();
     setSyncKey(null);
@@ -556,6 +565,7 @@ export default function App() {
                   deepLink={syncDeepLink}
                   syncKey={syncKey}
                   onEnable={enableSync}
+                  onJoin={joinSync}
                   onDisconnect={disconnectSync}
                 />
               )}
