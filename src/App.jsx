@@ -9,7 +9,7 @@ import TripMap from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
-import { buildStopIndex, stopsNear } from './lib/spatial.js';
+import { buildStopIndex } from './lib/spatial.js';
 import {
   clearSyncKey,
   loadDoc,
@@ -248,7 +248,9 @@ export default function App() {
 
   // Plan with an explicit start so callers like "Surprise me" can plan
   // against a freshly chosen point without waiting for setState to flush.
-  function planFromStart(startPt) {
+  // `randomTrip` selects a random candidate instead of the top-ranked one — the
+  // "surprise" in Surprise me.
+  function planFromStart(startPt, { randomTrip = false } = {}) {
     if (!dataset || !startPt) return;
     setBusy(true);
     // Two rAFs guarantee the busy-state paint commits before the planner
@@ -275,7 +277,9 @@ export default function App() {
           stopIndex: stopIndexRef.current,
         });
         setResult(r);
-        setSelectedTrip(0);
+        setSelectedTrip(
+          randomTrip && r.trips.length > 0 ? Math.floor(Math.random() * r.trips.length) : 0,
+        );
         setBusy(false);
       });
     });
@@ -286,46 +290,16 @@ export default function App() {
     planFromStart(start);
   }
 
-  // "Surprise me": geolocate, pick a random nearby stop that serves at least
-  // one unridden in-service bus route, set it as start, and immediately plan.
+  // "Surprise me": plan a random trip from the user's chosen start (an
+  // open-ended wander, so any destination/round-trip is cleared). Anchoring to
+  // the specified start means the map's start→first-stop line shows how far the
+  // surprise route's first boarding is from where you are. Requires a start —
+  // the button is disabled until one is set.
   function handleSurprise() {
-    if (!dataset) return;
-    setBusy(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const point = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-        const candidates = [];
-        const nearby = stopsNear(stopIndexRef.current, point, 5280); // 1 mi
-        for (const s of nearby) {
-          for (const rt of s.routes) {
-            const route = dataset.routes[rt];
-            if (!route || route.isTrain) continue;
-            if (ridden.has(rt)) continue;
-            candidates.push(s);
-            break;
-          }
-        }
-        if (candidates.length === 0) {
-          setBusy(false);
-          return;
-        }
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
-        const startPt = {
-          lat: pick.lat,
-          lon: pick.lon,
-          label: pick.stopName,
-          stopId: pick.stopId,
-        };
-        setStart(startPt);
-        setEnd(null);
-        setRoundTripState(false);
-        planFromStart(startPt);
-      },
-      () => {
-        setBusy(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
+    if (!dataset || !start) return;
+    setEnd(null);
+    setRoundTripState(false);
+    planFromStart(start, { randomTrip: true });
   }
 
   const ready = !!dataset && !!stopIndexRef.current;
@@ -421,9 +395,11 @@ export default function App() {
           <button
             type="button"
             onClick={handleSurprise}
-            disabled={!ready || busy}
+            disabled={!ready || !start || busy}
             className="rounded bg-violet-700 px-2 py-1 text-white text-xs hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
-            title="Pick a random nearby start and plan a trip"
+            title={
+              start ? 'Plan a random trip from your starting point' : 'Pick a starting point first'
+            }
           >
             Surprise me
           </button>
