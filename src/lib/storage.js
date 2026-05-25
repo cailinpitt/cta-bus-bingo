@@ -8,6 +8,10 @@ import { emptyDoc, isDoc, migrateRiddenArray } from './syncDoc.js';
 const DOC_KEY = 'cta-bus-bingo:doc';
 const LEGACY_KEY = 'cta-bus-bingo:ridden';
 const SYNC_KEY = 'cta-bus-bingo:syncKey';
+const LAST_PLAN_KEY = 'cta-bus-bingo:lastPlan';
+// Only restore a trip that's recent — a stale all-day-old itinerary isn't worth
+// resurrecting, but a reload/relaunch mid-trip is.
+const LAST_PLAN_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 // Exposed so App can react to cross-tab `storage` events (another tab of the
 // same browser editing the doc or sync key).
@@ -68,5 +72,31 @@ export function clearSyncKey() {
     localStorage.removeItem(SYNC_KEY);
   } catch {
     // ignore
+  }
+}
+
+// Persist the most recent plan so it survives a reload / PWA relaunch. Pass a
+// falsy snapshot to clear it.
+export function saveLastPlan(snapshot) {
+  try {
+    if (!snapshot) {
+      localStorage.removeItem(LAST_PLAN_KEY);
+      return;
+    }
+    localStorage.setItem(LAST_PLAN_KEY, JSON.stringify({ ...snapshot, savedAt: Date.now() }));
+  } catch {
+    // best-effort; private mode / quota just means no cross-reload restore
+  }
+}
+
+export function loadLastPlan() {
+  try {
+    const raw = localStorage.getItem(LAST_PLAN_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s.savedAt || Date.now() - s.savedAt > LAST_PLAN_MAX_AGE_MS) return null;
+    return s;
+  } catch {
+    return null;
   }
 }

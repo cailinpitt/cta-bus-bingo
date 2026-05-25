@@ -9,13 +9,16 @@ import TripMap from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
+import { rehydratePlan, serializePlan } from './lib/planSnapshot.js';
 import { buildStopIndex } from './lib/spatial.js';
 import {
   clearSyncKey,
   loadDoc,
+  loadLastPlan,
   loadSyncKey,
   STORAGE_KEYS,
   saveDoc,
+  saveLastPlan,
   saveSyncKey,
 } from './lib/storage.js';
 import { createSyncEngine, fetchTransport, generateSyncKey } from './lib/sync.js';
@@ -166,17 +169,60 @@ export default function App() {
       .catch((e) => setLoadErr(e.message));
   }, []);
 
-  // Auto-plan once on cold load if the URL hash already specified a start.
-  // This is what makes a shared link "just work" — paste, page loads, plan
-  // computes against the recipient's own ridden set.
+  // On cold load, once the dataset is ready, decide what to show:
+  //   1. Restore the last plan EXACTLY if one was saved recently and it isn't
+  //      contradicted by the URL (the reload / PWA-relaunch case — this is what
+  //      keeps you from losing your trip mid-ride). A relaunch also loses the
+  //      URL hash, so restore the trip-setup inputs too.
+  //   2. Otherwise, if the URL hash specified a start (a shared link), auto-plan
+  //      against the recipient's own ridden set.
   const autoPlannedRef = useRef(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fires exactly once when the dataset becomes available; autoPlannedRef guards against re-runs even though handlePlan closes over more state
+  const sameStart = (a, b) =>
+    a && b && Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lon - b.lon) < 1e-4;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fires exactly once when the dataset becomes available; autoPlannedRef guards against re-runs even though it closes over more state
   useEffect(() => {
-    if (autoPlannedRef.current) return;
-    if (!dataset || !initialUrl.start) return;
-    autoPlannedRef.current = true;
-    handlePlan();
+    if (autoPlannedRef.current || !dataset) return;
+
+    const saved = loadLastPlan();
+    // A shared link with a *different* start than the snapshot should win.
+    const urlContradicts = initialUrl.start && !sameStart(saved?.inputs?.start, initialUrl.start);
+    if (saved && !urlContradicts) {
+      const rehydrated = rehydratePlan(saved, dataset);
+      if (rehydrated && (rehydrated.trips.length > 0 || rehydrated.suggestedStart)) {
+        autoPlannedRef.current = true;
+        // Restore setup inputs (covers a relaunch where the URL hash was lost).
+        const inp = saved.inputs || {};
+        if (inp.start) setStart(inp.start);
+        setEnd(inp.end ?? null);
+        if (inp.cap != null) setCap(inp.cap);
+        setRoundTripState(!!inp.roundTrip);
+        if (inp.scheduleMode) setScheduleMode(inp.scheduleMode);
+        setScheduleAt(inp.scheduleAt ?? null);
+        setResult(rehydrated);
+        setSelectedTrip(
+          Math.min(saved.selectedTrip || 0, Math.max(0, rehydrated.trips.length - 1)),
+        );
+        return;
+      }
+    }
+
+    if (initialUrl.start) {
+      autoPlannedRef.current = true;
+      handlePlan();
+    }
   }, [dataset]);
+
+  // Persist the current plan so a reload / PWA relaunch can restore it.
+  useEffect(() => {
+    if (!result) return;
+    saveLastPlan(
+      serializePlan({
+        result,
+        selectedTrip,
+        inputs: { start, end, cap, roundTrip, scheduleMode, scheduleAt },
+      }),
+    );
+  }, [result, selectedTrip, start, end, cap, roundTrip, scheduleMode, scheduleAt]);
 
   // Translate a full next-Set from the UI into timestamped LWW-Map updates:
   // routes newly present become { r:1 }, routes dropped become { r:0 } tombstones
