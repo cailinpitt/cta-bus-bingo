@@ -146,6 +146,9 @@ export default function App() {
   const [setupCollapsed, setSetupCollapsed] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [heatmapOn, setHeatmapOn] = useState(false);
+  // Collapse the map on mobile so the route list / itinerary can use the full
+  // screen. Desktop keeps the side-by-side map regardless.
+  const [mapCollapsed, setMapCollapsed] = useState(false);
 
   useEffect(() => {
     setSetupCollapsed(!!result);
@@ -468,8 +471,24 @@ export default function App() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
-        <main className="sticky top-0 z-10 h-[45vh] shrink-0 lg:static lg:order-2 lg:h-auto lg:min-h-0 lg:flex-1">
-          <div className="relative h-full w-full">
+        <main
+          className={`shrink-0 lg:static lg:order-2 lg:h-auto lg:min-h-0 lg:flex-1 ${
+            mapCollapsed ? 'sticky top-0 z-20' : 'sticky top-0 z-10 h-[45vh]'
+          }`}
+        >
+          {/* Mobile: a sticky bar to bring the map back when it's collapsed. */}
+          {mapCollapsed && (
+            <button
+              type="button"
+              onClick={() => setMapCollapsed(false)}
+              className="flex w-full items-center justify-center gap-1 border-gh-border border-b bg-gh-surface px-3 py-2 text-gh-muted text-xs hover:text-white lg:hidden"
+            >
+              Show map ▾
+            </button>
+          )}
+          <div
+            className={`relative h-full w-full ${mapCollapsed ? 'hidden lg:block lg:h-full' : ''}`}
+          >
             <TripMap
               plan={currentPlan}
               routes={dataset?.routes}
@@ -479,6 +498,14 @@ export default function App() {
               mapClickMode={mapClickTarget !== null}
               heatmap={heatmap}
             />
+            {/* Mobile-only: collapse the map to free the screen for the list. */}
+            <button
+              type="button"
+              onClick={() => setMapCollapsed(true)}
+              className="absolute top-2 left-2 z-30 rounded-full bg-gh-surface/90 px-2.5 py-1 text-white text-xs shadow-lg hover:bg-gh-border lg:hidden"
+            >
+              Hide map ▴
+            </button>
             {mapClickTarget && (
               <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-2">
                 <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-amber-600/95 px-3 py-1.5 text-white text-xs shadow-lg">

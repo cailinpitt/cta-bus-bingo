@@ -350,7 +350,15 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
       });
     });
     mapRef.current = map;
+
+    // Keep the canvas sized to its container. Essential for the collapsible
+    // mobile map: when the container goes display:none → block again, MapLibre
+    // needs a resize() or it renders blank / wrong-sized until the next pan.
+    const ro = new ResizeObserver(() => mapRef.current?.resize());
+    ro.observe(containerRef.current);
+
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
     };
