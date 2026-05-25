@@ -22,9 +22,11 @@ export function buildStopIndex(stops) {
 // All stops within an axis-aligned bounding box of ~`feet`. The neighborhood is
 // over-collected and the caller filters with haversine to get the true radius.
 export function stopsNear(grid, { lat, lon }, feet) {
-  // 1 deg lat ≈ 364,000 ft; 1 deg lon ≈ 278,900 ft at Chicago latitude.
+  // 1 deg lat ≈ 364,000 ft; 1 deg lon ≈ 271,000 ft at Chicago latitude (41.85°,
+  // 364,000·cos 41.85° ≈ 270,960). The old 278,900 made the E/W half-width a hair
+  // too small, so a stop near the radius edge could fall in an uncollected cell.
   const dLat = feet / 364000;
-  const dLon = feet / 278900;
+  const dLon = feet / 271000;
   const minLat = Math.floor((lat - dLat) * CELL);
   const maxLat = Math.floor((lat + dLat) * CELL);
   const minLon = Math.floor((lon - dLon) * CELL);

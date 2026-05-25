@@ -47,75 +47,107 @@ export function runsAtHour(gtfs, now) {
 // Line operating as the Linden↔Howard shuttle outside express hours, where
 // the full Loop-going pattern isn't in service. We can't trust pattern-wide
 // rides under those conditions, so the planner skips the route.
+//
+// Evaluated PER DIRECTION against each direction's own weekly peak: a route is
+// reduced only when *every* direction with data this hour is truncated. Using a
+// global min-across-directions (the old behavior) wrongly excluded a route whose
+// late-night short-turn appears in one direction while the other still runs its
+// full pattern (e.g. 95th at 10pm: one direction short-turns, the other doesn't).
 export function isReducedService(gtfs, now) {
   if (!gtfs) return false;
   const dayType = dayTypeKey(now);
   const hour = now.getHours();
-  let currentMin = null;
-  let maxAcrossWeek = 0;
+  let anyDirHasData = false;
+  let allReduced = true;
   for (const d of Object.values(gtfs)) {
+    // This direction's own peak duration across the whole week.
+    let dirMax = 0;
     for (const dt of ['weekday', 'saturday', 'sunday']) {
       const dur = d?.durations?.[dt];
       if (!dur) continue;
       for (const v of Object.values(dur)) {
-        if (typeof v === 'number' && v > maxAcrossWeek) maxAcrossWeek = v;
+        if (typeof v === 'number' && v > dirMax) dirMax = v;
       }
     }
-    const dur = d?.durations?.[dayType];
-    if (dur && dur[hour] != null) {
-      if (currentMin == null || dur[hour] < currentMin) currentMin = dur[hour];
-    }
+    const curDur = d?.durations?.[dayType]?.[hour];
+    if (curDur == null || dirMax === 0) continue; // no data this hour for this direction
+    anyDirHasData = true;
+    if (curDur >= 0.5 * dirMax) allReduced = false; // this direction runs full → not reduced
   }
-  if (currentMin == null || maxAcrossWeek === 0) return false;
-  return currentMin < 0.5 * maxAcrossWeek;
+  return anyDirHasData && allReduced;
 }
 
-// Headway (minutes) for a route, picking the direction with data for `hour`.
-// Falls back to nearby hours within ±2 if exact hour is missing.
+// Nearest-hour lookup within ±2 hours for one direction's hourly map. Returns
+// the value at the closest hour with data, or null.
+function nearestHourValue(map, hour) {
+  if (!map) return null;
+  for (let delta = 0; delta <= 2; delta++) {
+    for (const h of [hour + delta, hour - delta]) {
+      if (map[h] != null) return map[h];
+    }
+  }
+  return null;
+}
+
+function median(nums) {
+  if (nums.length === 0) return null;
+  const s = [...nums].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+// Headway (minutes) for a route at this hour. We can't map a ride's compass
+// direction to a GTFS direction_id (the baked data doesn't carry that link), so
+// we take the MEDIAN of the directions' nearest-hour headways rather than the
+// optimistic min-across-directions. The min understated the wait whenever the
+// boarded direction was the less-frequent one; the two directions of a route are
+// usually within a minute or two, so the median is the representative wait.
+// Falls back to nearby hours within ±2 per direction if the exact hour is missing.
 export function headwayMinutes(gtfs, now) {
   if (!gtfs) return null;
   const dayType = dayTypeKey(now);
   const hour = now.getHours();
-  let best = null;
+  const samples = [];
   for (const d of Object.values(gtfs)) {
-    const hw = d?.headways?.[dayType];
-    if (!hw) continue;
-    for (let delta = 0; delta <= 2; delta++) {
-      for (const h of [hour + delta, hour - delta]) {
-        if (hw[h] != null) {
-          if (best == null || hw[h] < best) best = hw[h];
-          break;
-        }
-      }
-      if (best != null) break;
-    }
+    const v = nearestHourValue(d?.headways?.[dayType], hour);
+    if (v != null) samples.push(v);
   }
-  return best;
+  return median(samples);
 }
 
-// Per-mile minutes of travel time on this route at this hour, averaged across directions
-// using the GTFS index's reported pattern length (we don't have it here, so we use minutes
-// per route-traversal divided by typical CTA bus route length — but better: we use the
-// pattern's lengthFt at the call site and compute speed_ft_per_min from durations).
+// Per-foot minutes of in-vehicle travel time on this pattern at this hour.
 //
-// Returns minutes per foot. Caller multiplies by the segment's pdist delta to get
-// in-vehicle time. Falls back to a citywide default if the GTFS index doesn't have data.
+// Returns minutes per foot; the caller multiplies by the segment's pdist delta
+// to get in-vehicle time. Computed as durations[hour] / pattern.lengthFt for
+// each direction with data, then the MEDIAN of the plausible samples.
+//
+// "Plausible" filters out short-turn artifacts: the baked duration index buckets
+// trips by dominant *origin*, but a short-turn that shares the origin and ends
+// early still slips in, producing a tiny end-to-end duration. Divided by the
+// pattern's full length that implies an impossible speed (e.g. a 10-min "full"
+// run of the 9.7-mi 95th route → ~58 mph). We drop any sample faster than a
+// mode-specific ceiling so those artifacts don't make legs look 4-5x too fast.
 const DEFAULT_BUS_FT_PER_MIN = 1320; // ~15 mph
+const DEFAULT_TRAIN_FT_PER_MIN = 2200; // ~25 mph
+const MAX_BUS_FT_PER_MIN = 3960; // ~45 mph — faster implies a short-turn artifact
+const MAX_TRAIN_FT_PER_MIN = 4400; // ~50 mph
+
+function isTrainPattern(pattern) {
+  return typeof pattern?.pid === 'string' && pattern.pid.startsWith('train-');
+}
+
 export function minutesPerFoot(gtfs, pattern, now) {
+  const isTrain = isTrainPattern(pattern);
+  const fallback = 1 / (isTrain ? DEFAULT_TRAIN_FT_PER_MIN : DEFAULT_BUS_FT_PER_MIN);
+  if (!gtfs || !pattern?.lengthFt) return fallback;
   const dayType = dayTypeKey(now);
   const hour = now.getHours();
-  if (gtfs) {
-    for (const d of Object.values(gtfs)) {
-      const dur = d?.durations?.[dayType];
-      if (!dur) continue;
-      for (let delta = 0; delta <= 2; delta++) {
-        for (const h of [hour + delta, hour - delta]) {
-          if (dur[h] != null && pattern?.lengthFt) {
-            return dur[h] / pattern.lengthFt;
-          }
-        }
-      }
-    }
+  const ceil = isTrain ? MAX_TRAIN_FT_PER_MIN : MAX_BUS_FT_PER_MIN;
+  const samples = [];
+  for (const d of Object.values(gtfs)) {
+    const dur = nearestHourValue(d?.durations?.[dayType], hour);
+    if (dur == null) continue;
+    const ftPerMin = pattern.lengthFt / dur;
+    if (ftPerMin <= ceil) samples.push(dur / pattern.lengthFt); // plausible → keep
   }
-  return 1 / DEFAULT_BUS_FT_PER_MIN;
+  return median(samples) ?? fallback;
 }

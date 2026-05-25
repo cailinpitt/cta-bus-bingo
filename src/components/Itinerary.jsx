@@ -98,6 +98,11 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
           Couldn't fully reach your destination via transit — this is the closest we could get.
         </div>
       )}
+      {plan.reachedStart === false && (
+        <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-amber-200 text-xs">
+          Couldn't loop back near your start — this is the closest round trip we could build.
+        </div>
+      )}
       <ol className="space-y-2">
         {plan.legs.map((l, i) => {
           const color = colorForLeg(l, i, routes);

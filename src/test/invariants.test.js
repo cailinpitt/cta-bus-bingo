@@ -103,6 +103,59 @@ describe('planner invariants', () => {
     }
   });
 
+  it.each(scenarios)('$name: no transfer walk exceeds MAX_WALK_FT', (s) => {
+    // refineTransfers must never slide a transfer past the boarding radius.
+    for (const t of planAll(s)) {
+      for (let i = 1; i < t.legs.length; i++) {
+        const w = haversineFeet(t.legs[i - 1].alightStop, t.legs[i].boardStop);
+        expect(
+          w,
+          `transfer ${t.legs[i - 1].rt} -> ${t.legs[i].rt} walks ${Math.round(w)} ft (MAX_WALK_FT=${_consts.MAX_WALK_FT})`,
+        ).toBeLessThanOrEqual(_consts.MAX_WALK_FT + 1);
+      }
+    }
+  });
+
+  it('round-trip plans actually return to start (real last leg, not just index cap-1)', () => {
+    // Stress the early-termination path with a heavy ridden set + several starts.
+    const allBus = Object.keys(dataset.routes).filter((r) => !dataset.routes[r].isTrain);
+    const heavyRidden = new Set(allBus.filter((_, i) => i % 3 !== 0)); // ~2/3 ridden
+    const starts = [
+      { lat: 41.9395, lon: -87.6586 },
+      { lat: 41.8757, lon: -87.6243 },
+      { lat: 41.7983, lon: -87.5938 },
+    ];
+    for (const start of starts) {
+      for (let cap = 1; cap <= 3; cap++) {
+        const { trips } = planTrips({
+          dataset,
+          start,
+          end: null,
+          ridden: heavyRidden,
+          cap,
+          roundTrip: true,
+          scheduleMode: 'today',
+          now,
+          stopIndex,
+          noise: () => 0.5,
+        });
+        for (const t of trips) {
+          if (t.legs.length === 0) continue;
+          // Plans flagged reachedStart!==false claim to loop back; verify the
+          // genuine final leg lands within range. (reachedStart===false is the
+          // honest "couldn't loop back" fallback and is surfaced in the UI.)
+          if (t.reachedStart === false) continue;
+          const last = t.legs[t.legs.length - 1];
+          const d = haversineFeet(last.alightStop, start);
+          expect(
+            d,
+            `round-trip last leg ${last.alightStop.stopName} sits ${Math.round(d)} ft from start`,
+          ).toBeLessThanOrEqual(_consts.ROUND_TRIP_FT);
+        }
+      }
+    }
+  });
+
   it('round-trip plans end within ROUND_TRIP_FT of start', () => {
     const s = scenarios.find((x) => x.roundTrip);
     for (const t of planAll(s)) {

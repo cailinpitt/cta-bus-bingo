@@ -32,7 +32,7 @@ import { stopsNear } from './spatial.js';
 
 const MAX_WALK_FT = 2640; // 0.5 mi — boarding/alighting walk radius
 const TRANSFER_FT = 660; // 1/8 mi — stops "share a transfer point" within this radius
-const ROUND_TRIP_FT = 3960; // 0.75 mi — last alight must end within this of start (wider when trains allowed)
+const ROUND_TRIP_FT = 3960; // 0.75 mi — last alight must end within this of start
 // 0.75 mi — matches "a 12-15 minute walk closes the gap." Off-grid
 // destinations (mid-block, on a side street far from any single bus route)
 // often have a closest-possible bus drop-off of 0.5-0.7 mi. The bridge
@@ -242,10 +242,14 @@ function refineTransfers(chain, dataset, now, priorBeforeChain = []) {
     const bLo = Math.max(0, later.boardIdx - REFINE_WINDOW);
     const bHi = Math.min(later.alightIdx - 1, later.boardIdx + REFINE_WINDOW);
 
-    // Backtrack guard: alight must stay >= BACKTRACK_FT from every stop on
-    // legs strictly before `earlier`, plus the earlier leg's own board.
+    // Backtrack guard: alight must stay >= BACKTRACK_FT from every stop on legs
+    // strictly before `earlier` AND strictly after `later`, plus the earlier
+    // leg's own board. Downstream legs are included so refinement can't slide an
+    // alight into a stop the chain visits later. The `later` leg itself is
+    // excluded — its board is the transfer target and is *meant* to sit close.
     const priors = [...priorBeforeChain];
     for (let k = 0; k < i; k++) priors.push(chain[k].boardStop, chain[k].alightStop);
+    for (let k = i + 2; k < chain.length; k++) priors.push(chain[k].boardStop, chain[k].alightStop);
     priors.push(earlier.boardStop);
 
     const eBoardPdist = pe.stops[earlier.boardIdx].pdist;
@@ -274,6 +278,10 @@ function refineTransfers(chain, dataset, now, priorBeforeChain = []) {
         const lRideFt = lAlightPdist - bStop.pdist;
         if (lRideFt < floorFt(later)) continue;
         const walkFt = haversineFeet(aStop, bStop);
+        // Never refine into a transfer walk beyond the boarding radius — the
+        // greedy step only ever boards within MAX_WALK_FT, and the refinement
+        // must not silently exceed that envelope to shave a little ride time.
+        if (walkFt > MAX_WALK_FT) continue;
         const walkSec = walkSeconds(walkFt);
         const lRideSec = legTimeSeconds(
           { pattern: pl, boardIdx: bi, alightIdx: later.alightIdx },
@@ -446,6 +454,17 @@ function runOnePlan({
               break;
             }
           }
+          // Also guard against backtracking onto the free connector chosen in
+          // THIS same iteration — its stops aren't in priorStops yet (they're
+          // pushed only after a leg is committed in step C).
+          if (!backtrack && reach.viaFreeLeg) {
+            for (const prior of [reach.viaFreeLeg.boardStop, reach.viaFreeLeg.alightStop]) {
+              if (haversineFeet(alightStop, prior) < BACKTRACK_FT) {
+                backtrack = true;
+                break;
+              }
+            }
+          }
           if (backtrack) continue;
 
           const opps = isLastLeg ? 0 : transferAccess(alightStop, ridden, chainSet, rt, scheduleOk);
@@ -538,7 +557,22 @@ function runOnePlan({
   const totalSeconds = chain.reduce((n, l) => n + l.walkSeconds + l.rideSeconds, 0);
   const newRouteCount = chain.filter((l) => !l.free).length;
   const reachedEnd = end ? haversineFeet(position, end) <= END_NEAR_FT : null;
-  return { legs: chain, totalSeconds, newRouteCount, start, end: position, reachedEnd };
+  // Whether a round-trip actually closed the loop. Bound to the chain's REAL
+  // last leg, not outer index cap-1: when the greedy terminates early the final
+  // leg was chosen without the return constraint, so "round trips" could strand
+  // the rider far from start. planTrips filters on this so those never surface.
+  const lastLeg = chain.length > 0 ? chain[chain.length - 1] : null;
+  const reachedStart =
+    roundTrip && lastLeg ? haversineFeet(lastLeg.alightStop, start) <= ROUND_TRIP_FT : null;
+  return {
+    legs: chain,
+    totalSeconds,
+    newRouteCount,
+    start,
+    end: position,
+    reachedEnd,
+    reachedStart,
+  };
 }
 
 // Iteratively append free-connector legs that reduce the distance to `end`.
@@ -735,6 +769,11 @@ export function planTrips({
     return [...seen.values()];
   }
 
+  // A destination and a round-trip are mutually exclusive objectives; the UI
+  // enforces it, but a hand-crafted or stale share URL can set both. Destination
+  // wins so runOnePlan doesn't try to satisfy two conflicting end constraints.
+  if (end) roundTrip = false;
+
   let pool;
   if (end) {
     // Cap is a ceiling when a destination is set: search every length 1..cap
@@ -748,6 +787,20 @@ export function planTrips({
     }
     const reached = all.filter((p) => p.reachedEnd);
     pool = reached.length > 0 ? reached : all;
+  } else if (roundTrip) {
+    // Same cap-as-ceiling treatment as a destination: search every length
+    // 1..cap (a returning loop often needs fewer new routes than the ceiling),
+    // then partition into returned/not-returned so a plan that actually lands
+    // back near the start always beats one that strands the rider. Without this
+    // an early-terminating chain whose true last leg wasn't return-bound could
+    // be shown as a "round trip" that never comes back.
+    const all = [];
+    const perCapRuns = Math.max(2, Math.floor(searchRuns / cap));
+    for (let c = 1; c <= cap; c++) {
+      for (const p of searchOne({ capCount: c, runs: perCapRuns })) all.push(p);
+    }
+    const returned = all.filter((p) => p.reachedStart);
+    pool = returned.length > 0 ? returned : all;
   } else {
     pool = searchOne({ capCount: cap, runs: searchRuns });
   }
