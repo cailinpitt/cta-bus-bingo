@@ -16,6 +16,22 @@ export const LEG_COLORS = [
   '#facc15', // yellow-400
 ];
 
+// Distinct colors for the "compare routes" overlay (full route shapes drawn to
+// spot intersections). Kept separate from LEG_COLORS so an overlay and a planned
+// trip don't read as the same thing.
+export const OVERLAY_PALETTE = [
+  '#60a5fa',
+  '#f87171',
+  '#34d399',
+  '#fbbf24',
+  '#a78bfa',
+  '#fb923c',
+  '#22d3ee',
+  '#f472b6',
+  '#a3e635',
+  '#e879f9',
+];
+
 // Train legs use the official CTA line color; bus legs cycle through LEG_COLORS.
 // `i` is the leg index used to deterministically pick a bus color.
 export function colorForLeg(leg, i, routes) {
@@ -160,7 +176,16 @@ function startGeoJSON(start) {
   };
 }
 
-export default function TripMap({ plan, routes, start, end, onMapClick, mapClickMode, heatmap }) {
+export default function TripMap({
+  plan,
+  routes,
+  start,
+  end,
+  onMapClick,
+  mapClickMode,
+  heatmap,
+  overlay,
+}) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
 
@@ -193,6 +218,36 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
           'fill-color': '#a855f7',
           'fill-opacity': ['*', ['get', 'frac'], 0.5],
           'fill-outline-color': 'rgba(0,0,0,0)',
+        },
+      });
+      // Compare-routes overlay: full route shapes, drawn under the planned trip
+      // (added before the leg layers) so a trip on top still stands out.
+      map.addSource('overlay', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'overlay-line',
+        type: 'line',
+        source: 'overlay',
+        paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.8 },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+      });
+      map.addLayer({
+        id: 'overlay-label',
+        type: 'symbol',
+        source: 'overlay',
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['get', 'label'],
+          'text-font': ['Noto Sans Bold'],
+          'text-size': 12,
+          'symbol-spacing': 300,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#0d1117',
+          'text-halo-width': 2,
         },
       });
       map.addSource('legs', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -385,10 +440,12 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    const empty = { type: 'FeatureCollection', features: [] };
     const apply = () => {
       map.getSource('startpt')?.setData(startGeoJSON(start));
       map.getSource('endpt')?.setData(startGeoJSON(end));
-      map.getSource('heatmap')?.setData(heatmap ?? { type: 'FeatureCollection', features: [] });
+      map.getSource('heatmap')?.setData(heatmap ?? empty);
+      map.getSource('overlay')?.setData(overlay ?? empty);
       if (plan) {
         map.getSource('legs')?.setData(legGeoJSON(plan, routes));
         map.getSource('walks')?.setData(walkGeoJSON(plan, end));
@@ -410,9 +467,9 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
           map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
         }
       } else {
-        map.getSource('legs')?.setData({ type: 'FeatureCollection', features: [] });
-        map.getSource('walks')?.setData({ type: 'FeatureCollection', features: [] });
-        map.getSource('stops')?.setData({ type: 'FeatureCollection', features: [] });
+        map.getSource('legs')?.setData(empty);
+        map.getSource('walks')?.setData(empty);
+        map.getSource('stops')?.setData(empty);
         if (start && end) {
           const bounds = new maplibregl.LngLatBounds(
             [start.lon, start.lat],
@@ -424,6 +481,12 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
           map.flyTo({ center: [start.lon, start.lat], zoom: 13 });
         } else if (end) {
           map.flyTo({ center: [end.lon, end.lat], zoom: 13 });
+        } else if (overlay?.features?.length) {
+          // No trip — frame the overlaid routes so intersections are visible.
+          const bounds = new maplibregl.LngLatBounds();
+          for (const f of overlay.features)
+            for (const c of f.geometry.coordinates) bounds.extend(c);
+          if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 40, maxZoom: 14, duration: 600 });
         }
       }
     };
@@ -435,7 +498,7 @@ export default function TripMap({ plan, routes, start, end, onMapClick, mapClick
     // and gets stuck waiting for an event that's never coming again.
     if (map.getSource('legs')) apply();
     else map.once('load', apply);
-  }, [plan, start, end, routes, heatmap]);
+  }, [plan, start, end, routes, heatmap, overlay]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

@@ -3,10 +3,11 @@ import Controls from './components/Controls.jsx';
 import Itinerary from './components/Itinerary.jsx';
 import ProgressPanel from './components/ProgressPanel.jsx';
 import RiddenList from './components/RiddenList.jsx';
+import RouteOverlayPanel from './components/RouteOverlayPanel.jsx';
 import ScheduleLookup from './components/ScheduleLookup.jsx';
 import StartPicker from './components/StartPicker.jsx';
 import SyncPanel from './components/SyncPanel.jsx';
-import TripMap from './components/TripMap.jsx';
+import TripMap, { OVERLAY_PALETTE } from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
@@ -150,6 +151,33 @@ export default function App() {
   // Collapse the map on mobile so the route list / itinerary can use the full
   // screen. Desktop keeps the side-by-side map regardless.
   const [mapCollapsed, setMapCollapsed] = useState(false);
+  // Routes drawn on the map for visual comparison (spotting intersections),
+  // independent of any planned trip. Each route keeps the color it was given on
+  // first selection (held in overlayColors) until it's deselected, so adding or
+  // removing routes never reshuffles the colors of ones already on the map.
+  const [overlayRoutes, setOverlayRoutes] = useState(() => new Set());
+  const [overlayColors, setOverlayColors] = useState(() => new Map());
+
+  function setOverlay(next) {
+    setOverlayRoutes(next);
+    setOverlayColors((prev) => {
+      const m = new Map(prev);
+      for (const rt of [...m.keys()]) if (!next.has(rt)) m.delete(rt); // free deselected
+      const used = new Set(m.values());
+      for (const rt of next) {
+        if (m.has(rt)) continue; // keep an existing route's color
+        const color =
+          OVERLAY_PALETTE.find((c) => !used.has(c)) ??
+          OVERLAY_PALETTE[m.size % OVERLAY_PALETTE.length];
+        m.set(rt, color);
+        used.add(color);
+      }
+      return m;
+    });
+    // Comparing routes and viewing a trip are mutually exclusive — entering
+    // compare mode clears the trip (and vice versa, in planFromStart).
+    if (next.size > 0 && (result || start)) clearTrip();
+  }
 
   useEffect(() => {
     setSetupCollapsed(!!result);
@@ -303,6 +331,9 @@ export default function App() {
   function planFromStart(startPt, { randomTrip = false } = {}) {
     if (!dataset || !startPt) return;
     setBusy(true);
+    // Starting a trip exits compare-routes mode (mutually exclusive views).
+    setOverlayRoutes(new Set());
+    setOverlayColors(new Map());
     // Two rAFs guarantee the busy-state paint commits before the planner
     // blocks the main thread. A bare setTimeout(0) can run inside the same
     // frame in React 18 batching and the spinner never appears.
@@ -350,6 +381,18 @@ export default function App() {
     setEnd(null);
     setRoundTripState(false);
     planFromStart(start, { randomTrip: true });
+  }
+
+  // Clear the current trip back to a clean slate: drop the itinerary and the
+  // start/destination, and forget the saved snapshot so a reload doesn't bring
+  // it back. (Clearing the result re-opens the trip-setup panel automatically.)
+  function clearTrip() {
+    setResult(null);
+    setSelectedTrip(0);
+    setStart(null);
+    setEnd(null);
+    setRoundTripState(false);
+    saveLastPlan(null);
   }
 
   const ready = !!dataset && !!stopIndexRef.current;
@@ -433,6 +476,29 @@ export default function App() {
     return { ...trip, suggestedStart: result.suggestedStart };
   }, [result, selectedTrip]);
 
+  // Full route shapes for the selected overlay routes, as map-ready GeoJSON.
+  const overlay = useMemo(() => {
+    if (!dataset || overlayRoutes.size === 0) return null;
+    const features = [];
+    for (const rt of overlayRoutes) {
+      const route = dataset.routes[rt];
+      if (!route) continue;
+      const color = overlayColors.get(rt);
+      for (const pid of route.patternIds) {
+        const p = dataset.patterns[pid];
+        if (!p) continue;
+        const coordinates = p.points.map((pt) => [pt.lon, pt.lat]);
+        if (coordinates.length < 2) continue;
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates },
+          properties: { color, label: rt },
+        });
+      }
+    }
+    return { type: 'FeatureCollection', features };
+  }, [dataset, overlayRoutes, overlayColors]);
+
   return (
     <div className="flex h-full flex-col bg-gh-canvas text-white">
       <header className="flex items-center justify-between border-gh-border border-b px-4 py-2">
@@ -498,6 +564,7 @@ export default function App() {
               onMapClick={handleMapClick}
               mapClickMode={mapClickTarget !== null}
               heatmap={heatmap}
+              overlay={overlay}
             />
             {/* Mobile-only: collapse the map to free the screen for the list. */}
             <button
@@ -545,6 +612,16 @@ export default function App() {
                       </span>
                     )}
                   </button>
+                  {(result || start) && (
+                    <button
+                      type="button"
+                      onClick={clearTrip}
+                      className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-red-300"
+                      title="Clear the current trip and start over"
+                    >
+                      Clear
+                    </button>
+                  )}
                   {setupCollapsed ? (
                     <>
                       <button
@@ -640,6 +717,12 @@ export default function App() {
                 setHeatmapOn={setHeatmapOn}
               />
               <ScheduleLookup routes={dataset.routes} />
+              <RouteOverlayPanel
+                routes={dataset.routes}
+                selected={overlayRoutes}
+                setSelected={setOverlay}
+                colors={overlayColors}
+              />
               {import.meta.env.VITE_SYNC_URL && (
                 <SyncPanel
                   enabled={!!syncKey}
