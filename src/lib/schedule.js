@@ -10,7 +10,27 @@
 
 const DAY_TYPES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+// CTA runs a Sunday ("holiday") schedule on these six holidays. The baked
+// schedule index is bucketed by day-of-week only, so without this a holiday that
+// lands on a weekday (e.g. Memorial Day, a Monday) would look up weekday service
+// and suggest peak/express routes that aren't actually running. Returns true for
+// the six CTA Sunday-schedule holidays. Computed from rules (not a fixed list)
+// so it stays correct in future years.
+export function isCtaHoliday(date) {
+  const month = date.getMonth(); // 0-based
+  const day = date.getDate();
+  const dow = date.getDay();
+  if (month === 0 && day === 1) return true; // New Year's Day
+  if (month === 6 && day === 4) return true; // Independence Day
+  if (month === 11 && day === 25) return true; // Christmas Day
+  if (month === 4 && dow === 1 && day >= 25) return true; // Memorial Day — last Monday of May
+  if (month === 8 && dow === 1 && day <= 7) return true; // Labor Day — first Monday of September
+  if (month === 10 && dow === 4 && day >= 22 && day <= 28) return true; // Thanksgiving — 4th Thursday of November
+  return false;
+}
+
 export function dayTypeKey(date) {
+  if (isCtaHoliday(date)) return 'sunday';
   const day = date.getDay();
   if (day === 0) return 'sunday';
   if (day === 6) return 'saturday';
