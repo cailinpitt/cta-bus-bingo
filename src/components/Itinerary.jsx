@@ -103,17 +103,42 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
           Couldn't loop back near your start — this is the closest round trip we could build.
         </div>
       )}
-      <ol className="space-y-2">
+      {/* Numbered timeline: each step's badge is the take-order, connected by a
+          path with a down-arrow so the bus sequence reads at a glance. */}
+      <ol>
         {plan.legs.map((l, i) => {
           const color = colorForLeg(l, i, routes);
+          const isLast = i === plan.legs.length - 1;
           return (
-            <li key={`${i}-${l.rt}-${l.boardStop.stopId}`} className="flex gap-2">
-              <span
-                aria-hidden
-                className={`mt-1 h-3 w-3 shrink-0 ${l.free ? 'rounded-sm' : 'rounded-full'}`}
-                style={{ backgroundColor: color }}
-              />
-              <div className="flex-1">
+            <li key={`${i}-${l.rt}-${l.boardStop.stopId}`} className="flex gap-3">
+              {/* Left rail: step number + connecting path/arrow to the next leg. */}
+              <div className="flex w-6 shrink-0 flex-col items-center">
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-full font-semibold text-[11px] text-white ring-2 ring-gh-surface"
+                  style={{ backgroundColor: color }}
+                >
+                  {i + 1}
+                </span>
+                {!isLast && (
+                  <>
+                    <span className="w-0.5 flex-1 bg-gh-border" aria-hidden />
+                    <svg
+                      viewBox="0 0 12 12"
+                      className="-mt-1 h-3 w-3 text-gh-border"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      role="img"
+                      aria-label="then"
+                    >
+                      <path d="M3 5l3 3 3-3" />
+                    </svg>
+                  </>
+                )}
+              </div>
+              <div className="flex-1 pb-3">
                 <div className="font-medium text-white">
                   {l.free && (
                     <span className="mr-1 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gh-muted">
