@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dayTypeKey,
+  frequencyForDay,
   headwayMinutes,
   isCtaHoliday,
   isReducedService,
@@ -66,6 +67,30 @@ describe('minutesPerFoot drops short-turn artifacts', () => {
 describe('headwayMinutes is direction-representative', () => {
   it('returns the median wait across directions, not the optimistic min', () => {
     expect(headwayMinutes(gtfs, now)).toBe(22); // median of [20, 22]
+  });
+});
+
+describe('frequencyForDay', () => {
+  const freqGtfs = {
+    0: {
+      headways: { weekday: { 6: 10, 7: 8, 12: 12 } },
+      durations: { weekday: { 6: 40, 12: 45 } },
+    },
+    1: { headways: { weekday: { 6: 12, 7: 9 } } },
+  };
+  const ordinaryWed = new Date(2026, 4, 20, 12); // a plain weekday
+
+  it('returns sorted per-hour headways/durations for the day type', () => {
+    const f = frequencyForDay(freqGtfs, ordinaryWed);
+    expect(f.map((x) => x.hour)).toEqual([6, 7, 12]); // hours with a headway, sorted
+    expect(f.find((x) => x.hour === 6).headwayMin).toBe(12); // median of [10, 12]
+    expect(f.find((x) => x.hour === 6).durationMin).toBe(40);
+    expect(f.find((x) => x.hour === 7).durationMin).toBe(null); // no duration that hour
+  });
+
+  it('is empty when the route has no service that day type', () => {
+    const weekdayOnly = { 0: { headways: { weekday: { 8: 10 } } } };
+    expect(frequencyForDay(weekdayOnly, new Date(2026, 4, 24, 12))).toEqual([]); // a Sunday
   });
 });
 

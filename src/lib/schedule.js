@@ -134,6 +134,42 @@ export function headwayMinutes(gtfs, now) {
   return median(samples);
 }
 
+// Per-hour service frequency for a route on `now`'s day type. Returns a sorted
+// array of { hour, headwayMin, durationMin } for every hour that has service.
+// Headway and duration are medians across directions (the same way the planner
+// prices them), so the displayed frequency matches what trips are built on.
+// `durationMin` may be null when the hour has no duration data.
+export function frequencyForDay(gtfs, now) {
+  if (!gtfs) return [];
+  const dayType = dayTypeKey(now);
+  const byHour = new Map(); // hour -> { headways: [], durations: [] }
+  const bucket = (h) => {
+    let e = byHour.get(h);
+    if (!e) {
+      e = { headways: [], durations: [] };
+      byHour.set(h, e);
+    }
+    return e;
+  };
+  for (const d of Object.values(gtfs)) {
+    const hw = d?.headways?.[dayType];
+    if (hw) for (const [h, v] of Object.entries(hw)) if (v != null) bucket(+h).headways.push(v);
+    const dur = d?.durations?.[dayType];
+    if (dur) for (const [h, v] of Object.entries(dur)) if (v != null) bucket(+h).durations.push(v);
+  }
+  const out = [];
+  for (const [hour, e] of byHour) {
+    if (e.headways.length === 0) continue; // a headway is what makes the hour "served"
+    out.push({
+      hour,
+      headwayMin: median(e.headways),
+      durationMin: e.durations.length ? median(e.durations) : null,
+    });
+  }
+  out.sort((a, b) => a.hour - b.hour);
+  return out;
+}
+
 // Per-foot minutes of in-vehicle travel time on this pattern at this hour.
 //
 // Returns minutes per foot; the caller multiplies by the segment's pdist delta

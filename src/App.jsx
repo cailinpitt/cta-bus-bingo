@@ -3,6 +3,7 @@ import Controls from './components/Controls.jsx';
 import Itinerary from './components/Itinerary.jsx';
 import ProgressPanel from './components/ProgressPanel.jsx';
 import RiddenList from './components/RiddenList.jsx';
+import ScheduleLookup from './components/ScheduleLookup.jsx';
 import StartPicker from './components/StartPicker.jsx';
 import SyncPanel from './components/SyncPanel.jsx';
 import TripMap from './components/TripMap.jsx';
@@ -638,6 +639,7 @@ export default function App() {
                 heatmapOn={heatmapOn}
                 setHeatmapOn={setHeatmapOn}
               />
+              <ScheduleLookup routes={dataset.routes} />
               {import.meta.env.VITE_SYNC_URL && (
                 <SyncPanel
                   enabled={!!syncKey}
