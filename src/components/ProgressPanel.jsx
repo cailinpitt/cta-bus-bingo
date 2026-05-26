@@ -31,7 +31,7 @@ export default function ProgressPanel({ routes, ridden, heatmapOn, setHeatmapOn 
     <div className="rounded-lg border border-gh-border bg-gh-surface p-3 text-sm">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-gh-muted text-xs uppercase tracking-wide">Progress</span>
-        <span className="font-medium text-white">
+        <span className="font-medium text-gh-fg">
           {stats.ridden}/{stats.total} · {stats.pct}%
         </span>
       </div>
@@ -44,7 +44,9 @@ export default function ProgressPanel({ routes, ridden, heatmapOn, setHeatmapOn 
         </div>
       )}
       {stats.next == null && (
-        <div className="mb-2 text-emerald-300 text-xs">You've ridden every bus route. Nice.</div>
+        <div className="mb-2 text-emerald-300 light:text-emerald-700 text-xs">
+          You've ridden every bus route. Nice.
+        </div>
       )}
       <button
         type="button"
@@ -52,7 +54,7 @@ export default function ProgressPanel({ routes, ridden, heatmapOn, setHeatmapOn 
         className={`w-full rounded px-2 py-1 text-xs ${
           heatmapOn
             ? 'bg-violet-700 text-white hover:bg-violet-600'
-            : 'bg-gh-subtle text-gh-muted hover:text-white'
+            : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'
         }`}
       >
         {heatmapOn ? 'Hide coverage heatmap' : 'Show coverage heatmap'}

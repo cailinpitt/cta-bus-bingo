@@ -40,7 +40,16 @@ export function colorForLeg(leg, i, routes) {
   return LEG_COLORS[i % LEG_COLORS.length];
 }
 
-const MAP_STYLE = {
+// CARTO basemaps: "dark matter" for dark mode, "positron" (light_all) for light
+// — both low-contrast so colored leg polylines and stop dots stay legible.
+const basemapTiles = (dark) => {
+  const set = dark ? 'dark_all' : 'light_all';
+  return ['a', 'b', 'c', 'd'].map(
+    (s) => `https://${s}.basemaps.cartocdn.com/${set}/{z}/{x}/{y}.png`,
+  );
+};
+
+const makeStyle = (dark) => ({
   version: 8,
   // Required for symbol layers with text-field — using MapLibre's public
   // demotiles glyph server (free, no key). Without this, route-id labels on
@@ -49,14 +58,7 @@ const MAP_STYLE = {
   sources: {
     basemap: {
       type: 'raster',
-      // CARTO "dark matter" — low-contrast dark basemap so the colored leg
-      // polylines and stop dots stay legible.
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      ],
+      tiles: basemapTiles(dark),
       tileSize: 256,
       attribution:
         '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
@@ -64,7 +66,7 @@ const MAP_STYLE = {
     },
   },
   layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
-};
+});
 
 function legGeoJSON(plan, routes) {
   const features = [];
@@ -185,15 +187,19 @@ export default function TripMap({
   mapClickMode,
   heatmap,
   overlay,
+  dark = true,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  // Latest theme, read by the once-created map's init without re-running it.
+  const darkRef = useRef(dark);
+  darkRef.current = dark;
 
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAP_STYLE,
+      style: makeStyle(darkRef.current),
       center: [-87.6298, 41.8781],
       zoom: 11,
       // Force the attribution into the collapsed "i" button. MapLibre's auto
@@ -418,6 +424,15 @@ export default function TripMap({
       mapRef.current = null;
     };
   }, []);
+
+  // Swap the basemap raster tiles when the theme changes (light ↔ dark).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => map.getSource('basemap')?.setTiles(basemapTiles(dark));
+    if (map.getSource('basemap')) apply();
+    else map.once('load', apply);
+  }, [dark]);
 
   // Click handler — re-bind whenever the mapClickMode toggles so we don't run when off.
   useEffect(() => {

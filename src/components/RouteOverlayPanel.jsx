@@ -37,7 +37,7 @@ export default function RouteOverlayPanel({ routes, selected, setSelected, color
             <button
               type="button"
               onClick={() => setSelected(new Set())}
-              className="text-gh-muted text-xs hover:text-white"
+              className="text-gh-muted text-xs hover:text-gh-fg"
             >
               Clear
             </button>
@@ -45,7 +45,7 @@ export default function RouteOverlayPanel({ routes, selected, setSelected, color
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
-            className="text-gh-muted text-xs hover:text-white"
+            className="text-gh-muted text-xs hover:text-gh-fg"
           >
             {collapsed ? 'Expand' : 'Collapse'}
           </button>
@@ -68,7 +68,7 @@ export default function RouteOverlayPanel({ routes, selected, setSelected, color
                   onClick={() => toggle(rt)}
                   title={r.name}
                   className={`flex min-h-[44px] items-center justify-center rounded px-2 py-2 font-medium text-sm ${
-                    on ? 'text-white' : 'bg-gh-subtle text-gh-muted hover:text-white'
+                    on ? 'text-white' : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'
                   }`}
                   style={on ? { backgroundColor: color } : undefined}
                 >

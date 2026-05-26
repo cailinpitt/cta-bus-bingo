@@ -18,7 +18,7 @@ export default function TripPicker({ trips, selectedIndex, onSelect }) {
             className={`flex min-h-[44px] shrink-0 flex-col items-start justify-center rounded px-3 py-2 text-left text-sm ${
               i === selectedIndex
                 ? 'bg-blue-600 text-white'
-                : 'bg-gh-canvas text-gh-muted hover:text-white'
+                : 'bg-gh-canvas text-gh-muted hover:text-gh-fg'
             }`}
           >
             <div className="font-semibold leading-tight">Option {i + 1}</div>

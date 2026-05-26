@@ -77,7 +77,7 @@ export default function RiddenList({ routes, ridden, setRidden }) {
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="text-gh-muted text-xs hover:text-white"
+          className="text-gh-muted text-xs hover:text-gh-fg"
         >
           {collapsed ? 'Expand' : 'Collapse'}
         </button>
@@ -114,7 +114,7 @@ export default function RiddenList({ routes, ridden, setRidden }) {
           {importError && (
             <div
               role="alert"
-              className="mb-2 rounded border border-red-700 bg-red-950/40 px-2 py-1 text-xs text-red-300"
+              className="mb-2 rounded border border-red-700 light:border-red-300 bg-red-950/40 light:bg-red-50 px-2 py-1 text-xs text-red-300 light:text-red-700"
             >
               {importError}
             </div>
@@ -130,7 +130,7 @@ export default function RiddenList({ routes, ridden, setRidden }) {
                   onClick={() => toggle(rt)}
                   title={r.name}
                   className={`flex min-h-[44px] items-center justify-center rounded px-2 py-2 text-sm font-medium ${
-                    on ? 'bg-emerald-700 text-white' : 'bg-gh-subtle text-gh-muted hover:text-white'
+                    on ? 'bg-emerald-700 text-white' : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'
                   }`}
                 >
                   {rt}

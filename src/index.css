@@ -4,6 +4,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens (RGB triplets). Dark is the default; `html.light` overrides to a
+   light slate/white palette. Consumed by the gh-* Tailwind colors. */
+:root {
+  --gh-canvas: 13 17 23;
+  --gh-subtle: 33 38 45;
+  --gh-surface: 22 27 34;
+  --gh-border: 48 54 61;
+  --gh-muted: 139 148 158;
+  --gh-fg: 255 255 255;
+  color-scheme: dark;
+}
+html.light {
+  --gh-canvas: 241 245 249; /* slate-100 */
+  --gh-surface: 255 255 255; /* white */
+  --gh-subtle: 226 232 240; /* slate-200 */
+  --gh-border: 203 213 225; /* slate-300 */
+  --gh-muted: 71 85 105; /* slate-600 */
+  --gh-fg: 15 23 42; /* slate-900 */
+  color-scheme: light;
+}
+
 html,
 body,
 #root {

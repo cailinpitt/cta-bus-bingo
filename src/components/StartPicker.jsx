@@ -72,7 +72,7 @@ export default function StartPicker({
             <button
               type="button"
               onClick={onClear}
-              className="shrink-0 rounded px-1.5 py-0.5 text-gh-muted text-xs hover:bg-gh-subtle hover:text-white"
+              className="shrink-0 rounded px-1.5 py-0.5 text-gh-muted text-xs hover:bg-gh-subtle hover:text-gh-fg"
               title={`Clear ${noun}`}
             >
               ×
@@ -92,7 +92,7 @@ export default function StartPicker({
             type="button"
             onClick={() => setTab(k)}
             className={`rounded px-2 py-1 ${
-              tab === k ? 'bg-blue-600 text-white' : 'bg-gh-subtle text-gh-muted hover:text-white'
+              tab === k ? 'bg-blue-600 text-white' : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'
             }`}
           >
             {label}
@@ -105,7 +105,7 @@ export default function StartPicker({
           type="button"
           onClick={doGeolocate}
           disabled={busy}
-          className="w-full rounded bg-gh-subtle px-3 py-2 text-white hover:bg-gh-border disabled:opacity-50"
+          className="w-full rounded bg-gh-subtle px-3 py-2 text-gh-fg hover:bg-gh-border disabled:opacity-50"
         >
           {busy ? 'Locating…' : 'Use my current location'}
         </button>
@@ -118,7 +118,7 @@ export default function StartPicker({
             onChange={(e) => setAddr(e.target.value)}
             disabled={busy}
             placeholder={busy ? 'Looking up…' : 'e.g. Belmont & Clark'}
-            className="flex-1 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white placeholder:text-gh-muted/60 disabled:opacity-60"
+            className="flex-1 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-gh-fg placeholder:text-gh-muted/60 disabled:opacity-60"
           />
           <button
             type="submit"
@@ -160,7 +160,7 @@ export default function StartPicker({
         <button
           type="button"
           onClick={() => setMapClickActive(!mapClickActive)}
-          className={`w-full rounded px-3 py-2 text-white ${
+          className={`w-full rounded px-3 py-2 text-gh-fg ${
             mapClickActive ? 'bg-amber-600 hover:bg-amber-500' : 'bg-gh-subtle hover:bg-gh-border'
           }`}
         >
@@ -176,7 +176,7 @@ export default function StartPicker({
             value={stopQ}
             onChange={(e) => setStopQ(e.target.value)}
             placeholder="Search stops by name"
-            className="w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white placeholder:text-gh-muted/60"
+            className="w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-gh-fg placeholder:text-gh-muted/60"
           />
           {stopMatches.length > 0 && (
             <ul className="mt-1 max-h-40 overflow-y-auto rounded border border-gh-border bg-gh-canvas">
@@ -187,7 +187,7 @@ export default function StartPicker({
                     onClick={() =>
                       onPick({ lat: s.lat, lon: s.lon, label: s.stopName, stopId: s.stopId })
                     }
-                    className="w-full px-2 py-1 text-left text-white hover:bg-gh-subtle"
+                    className="w-full px-2 py-1 text-left text-gh-fg hover:bg-gh-subtle"
                   >
                     <span>{s.stopName}</span>{' '}
                     <span className="text-gh-muted text-xs">({[...s.routes].join(', ')})</span>

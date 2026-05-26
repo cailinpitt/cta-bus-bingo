@@ -69,7 +69,7 @@ export default function ScheduleLookup({ routes }) {
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="text-gh-muted text-xs hover:text-white"
+          className="text-gh-muted text-xs hover:text-gh-fg"
         >
           {collapsed ? 'Expand' : 'Collapse'}
         </button>
@@ -81,7 +81,7 @@ export default function ScheduleLookup({ routes }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search a bus (e.g. 22 or Clark)"
-            className="w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white placeholder:text-gh-muted/60"
+            className="w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-gh-fg placeholder:text-gh-muted/60"
           />
 
           {!selected && (
@@ -92,7 +92,7 @@ export default function ScheduleLookup({ routes }) {
                   key={rt}
                   onClick={() => setSelected(rt)}
                   title={r.name}
-                  className="flex min-h-[40px] items-center justify-center rounded bg-gh-subtle px-2 py-1.5 font-medium text-gh-muted text-sm hover:text-white"
+                  className="flex min-h-[40px] items-center justify-center rounded bg-gh-subtle px-2 py-1.5 font-medium text-gh-muted text-sm hover:text-gh-fg"
                 >
                   {rt}
                 </button>
@@ -107,20 +107,20 @@ export default function ScheduleLookup({ routes }) {
             <div className="mt-2">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <span className="font-semibold text-white">{selected}</span>{' '}
+                  <span className="font-semibold text-gh-fg">{selected}</span>{' '}
                   <span className="text-gh-muted text-xs">{routes[selected]?.name}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
-                  className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-white"
+                  className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-gh-fg"
                 >
                   Back
                 </button>
               </div>
 
               {!freq || freq.length === 0 ? (
-                <div className="rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-amber-200 text-xs">
+                <div className="rounded border border-amber-700/50 bg-amber-900/30 light:border-amber-300 light:bg-amber-50 px-2 py-1 text-amber-200 light:text-amber-800 text-xs">
                   Not running today ({todayLabel}).
                 </div>
               ) : (
@@ -140,7 +140,7 @@ export default function ScheduleLookup({ routes }) {
                         title={f.durationMin ? `~${Math.round(f.durationMin)} min end-to-end` : ''}
                         className="rounded bg-gh-canvas px-2 py-1 text-center"
                       >
-                        <div className="font-medium text-white/80 text-xs">{fmtHour(f.hour)}</div>
+                        <div className="font-medium text-gh-fg/80 text-xs">{fmtHour(f.hour)}</div>
                         <div className="text-[11px] text-gh-muted leading-tight">
                           every {Math.round(f.headwayMin)} min
                         </div>

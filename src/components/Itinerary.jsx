@@ -52,7 +52,7 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
             </span>
           )}
         </span>
-        <span className="font-medium text-white">~{fmtMin(plan.totalSeconds)} total</span>
+        <span className="font-medium text-gh-fg">~{fmtMin(plan.totalSeconds)} total</span>
       </div>
       {onMarkRidden &&
         ridden &&
@@ -62,7 +62,7 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
           if (uniqueUnmarked.length === 0 && !undoSnapshot) return null;
           if (undoSnapshot) {
             return (
-              <div className="mb-2 flex items-center justify-between rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-emerald-200 text-xs">
+              <div className="mb-2 flex items-center justify-between rounded border border-emerald-700/60 bg-emerald-900/30 light:border-emerald-300 light:bg-emerald-50 px-2 py-1 text-emerald-200 light:text-emerald-800 text-xs">
                 <span>Marked {undoSnapshot.added.length} as ridden.</span>
                 <button
                   type="button"
@@ -70,7 +70,7 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
                     onMarkRidden(undoSnapshot.previous);
                     setUndoSnapshot(null);
                   }}
-                  className="rounded bg-emerald-800/60 px-2 py-0.5 hover:bg-emerald-700"
+                  className="rounded bg-emerald-800/60 px-2 py-0.5 hover:bg-emerald-700 light:bg-emerald-200"
                 >
                   Undo
                 </button>
@@ -94,12 +94,12 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
           );
         })()}
       {plan.reachedEnd === false && (
-        <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-amber-200 text-xs">
+        <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 light:border-amber-300 light:bg-amber-50 px-2 py-1 text-amber-200 light:text-amber-800 text-xs">
           Couldn't fully reach your destination via transit — this is the closest we could get.
         </div>
       )}
       {plan.reachedStart === false && (
-        <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 px-2 py-1 text-amber-200 text-xs">
+        <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 light:border-amber-300 light:bg-amber-50 px-2 py-1 text-amber-200 light:text-amber-800 text-xs">
           Couldn't loop back near your start — this is the closest round trip we could build.
         </div>
       )}
@@ -139,7 +139,7 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
                 )}
               </div>
               <div className="flex-1 pb-3">
-                <div className="font-medium text-white">
+                <div className="font-medium text-gh-fg">
                   {l.free && (
                     <span className="mr-1 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gh-muted">
                       {routes?.[l.rt]?.isTrain ? 'train' : 'ridden'}
@@ -152,16 +152,16 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
                   {l.walkFeet > 50 && (
                     <>
                       Walk {fmtWalkDistance(l.walkFeet)} ({fmtMin(l.walkSeconds)}) to{' '}
-                      <span className="text-white/80">{l.boardStop.stopName}</span>, then{' '}
+                      <span className="text-gh-fg/80">{l.boardStop.stopName}</span>, then{' '}
                     </>
                   )}
                   {l.walkFeet <= 50 && (
                     <>
-                      Board at <span className="text-white/80">{l.boardStop.stopName}</span>, then{' '}
+                      Board at <span className="text-gh-fg/80">{l.boardStop.stopName}</span>, then{' '}
                     </>
                   )}
                   ride {fmtMin(l.rideSeconds)} to{' '}
-                  <span className="text-white/80">{l.alightStop.stopName}</span>.
+                  <span className="text-gh-fg/80">{l.alightStop.stopName}</span>.
                 </div>
               </div>
             </li>

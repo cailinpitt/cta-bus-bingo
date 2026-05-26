@@ -19,11 +19,11 @@ function statusLabel(status) {
     case 'syncing':
       return { text: 'Syncing…', cls: 'text-gh-muted' };
     case 'offline':
-      return { text: 'Offline — will sync later', cls: 'text-amber-300' };
+      return { text: 'Offline — will sync later', cls: 'text-amber-300 light:text-amber-700' };
     case 'idle':
       return {
         text: `Synced ✓${status.lastSyncedAt ? ` · ${relativeTime(status.lastSyncedAt)}` : ''}`,
-        cls: 'text-emerald-300',
+        cls: 'text-emerald-300 light:text-emerald-700',
       };
     default:
       return { text: 'Sync on', cls: 'text-gh-muted' };
@@ -135,7 +135,7 @@ export default function SyncPanel({
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
-              className="min-w-0 flex-1 rounded bg-gh-canvas px-2 py-1 text-white text-xs placeholder:text-gh-muted/50"
+              className="min-w-0 flex-1 rounded bg-gh-canvas px-2 py-1 text-gh-fg text-xs placeholder:text-gh-muted/50"
             />
             <button
               type="submit"
@@ -144,7 +144,9 @@ export default function SyncPanel({
               Join
             </button>
           </div>
-          {joinErr && <div className="text-[11px] text-amber-300">{joinErr}</div>}
+          {joinErr && (
+            <div className="text-[11px] text-amber-300 light:text-amber-700">{joinErr}</div>
+          )}
         </form>
       </div>
     );
@@ -159,7 +161,7 @@ export default function SyncPanel({
       </div>
 
       {flash && (
-        <div className="mb-2 rounded border border-emerald-700/60 bg-emerald-900/30 px-2 py-1 text-emerald-200 text-xs">
+        <div className="mb-2 rounded border border-emerald-700/60 bg-emerald-900/30 light:border-emerald-300 light:bg-emerald-50 px-2 py-1 text-emerald-200 light:text-emerald-800 text-xs">
           {flash}
         </div>
       )}
@@ -181,7 +183,7 @@ export default function SyncPanel({
             <button
               type="button"
               onClick={() => setConfirm(null)}
-              className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted hover:text-white"
+              className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted hover:text-gh-fg"
             >
               Cancel
             </button>
@@ -192,14 +194,14 @@ export default function SyncPanel({
           <button
             type="button"
             onClick={() => setShowPair((v) => !v)}
-            className="flex-1 rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border"
+            className="flex-1 rounded bg-gh-subtle px-2 py-1 text-gh-fg text-xs hover:bg-gh-border"
           >
             {showPair ? 'Hide pairing' : 'Add a device'}
           </button>
           <button
             type="button"
             onClick={() => setConfirm('disconnect')}
-            className="rounded bg-gh-subtle px-2 py-1 text-gh-muted text-xs hover:text-white"
+            className="rounded bg-gh-subtle px-2 py-1 text-gh-muted text-xs hover:text-gh-fg"
           >
             Disconnect
           </button>
@@ -228,7 +230,7 @@ export default function SyncPanel({
           <button
             type="button"
             onClick={() => copy(deepLink, setLinkCopied)}
-            className="w-full rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border"
+            className="w-full rounded bg-gh-subtle px-2 py-1 text-gh-fg text-xs hover:bg-gh-border"
           >
             {linkCopied ? 'Copied!' : 'Copy pairing link'}
           </button>
@@ -240,16 +242,16 @@ export default function SyncPanel({
               <button
                 type="button"
                 onClick={() => copy(syncKey, setCodeCopied)}
-                className="shrink-0 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] text-white hover:bg-gh-border"
+                className="shrink-0 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] text-gh-fg hover:bg-gh-border"
               >
                 {codeCopied ? 'Copied!' : 'Copy'}
               </button>
             </div>
-            <code className="block break-all text-white/80 text-xs">{syncKey}</code>
+            <code className="block break-all text-gh-fg/80 text-xs">{syncKey}</code>
           </div>
 
           {confirm === 'rotate' ? (
-            <div className="w-full rounded border border-amber-700/50 bg-amber-900/20 px-2 py-1.5 text-amber-200 text-xs">
+            <div className="w-full rounded border border-amber-700/50 bg-amber-900/20 light:border-amber-300 light:bg-amber-50 px-2 py-1.5 text-amber-200 light:text-amber-800 text-xs">
               <p className="mb-1">
                 Make a new code? Your routes carry over, but other devices must re-pair with the new
                 code.
@@ -268,7 +270,7 @@ export default function SyncPanel({
                 <button
                   type="button"
                   onClick={() => setConfirm(null)}
-                  className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted hover:text-white"
+                  className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted hover:text-gh-fg"
                 >
                   Cancel
                 </button>
@@ -278,7 +280,7 @@ export default function SyncPanel({
             <button
               type="button"
               onClick={() => setConfirm('rotate')}
-              className="text-gh-muted text-[11px] underline hover:text-white"
+              className="text-gh-muted text-[11px] underline hover:text-gh-fg"
             >
               Rotate sync key
             </button>

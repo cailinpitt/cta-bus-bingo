@@ -9,6 +9,7 @@ import StartPicker from './components/StartPicker.jsx';
 import SyncPanel from './components/SyncPanel.jsx';
 import TripMap, { OVERLAY_PALETTE } from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
+import { useTheme } from './hooks/useTheme.js';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
 import { rehydratePlan, serializePlan } from './lib/planSnapshot.js';
@@ -35,6 +36,7 @@ const initialSyncKey = readSyncKey();
 export default function App() {
   const [dataset, setDataset] = useState(null);
   const [loadErr, setLoadErr] = useState(null);
+  const [dark, toggleTheme] = useTheme();
   const [start, setStart] = useState(initialUrl.start ?? null);
   const [end, setEnd] = useState(initialUrl.end ?? null);
   // The ridden set is backed by a sync doc (LWW-Map) in localStorage so it can
@@ -500,7 +502,7 @@ export default function App() {
   }, [dataset, overlayRoutes, overlayColors]);
 
   return (
-    <div className="flex h-full flex-col bg-gh-canvas text-white">
+    <div className="flex h-full flex-col bg-gh-canvas text-gh-fg">
       <header className="flex items-center justify-between border-gh-border border-b px-4 py-2">
         <h1 className="font-semibold text-lg">CTA Bus Bingo</h1>
         <div className="flex items-center gap-3">
@@ -508,6 +510,15 @@ export default function App() {
             {ready ? `${Object.keys(dataset.routes).length} routes` : 'loading…'}
             {gtfsAge && <> · schedule {gtfsAge}</>}
           </div>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="rounded bg-gh-subtle px-2 py-1 text-gh-fg text-xs hover:bg-gh-border"
+            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle light/dark mode"
+          >
+            {dark ? '☀️ Light' : '🌙 Dark'}
+          </button>
           <button
             type="button"
             onClick={handleSurprise}
@@ -523,7 +534,7 @@ export default function App() {
             type="button"
             onClick={handleShare}
             disabled={!start}
-            className="rounded bg-gh-subtle px-2 py-1 text-white text-xs hover:bg-gh-border disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-gh-subtle px-2 py-1 text-gh-fg text-xs hover:bg-gh-border disabled:cursor-not-allowed disabled:opacity-40"
             title={start ? 'Copy a link that restores this trip' : 'Pick a starting point first'}
           >
             {shareCopied ? 'Copied!' : 'Share'}
@@ -532,7 +543,7 @@ export default function App() {
       </header>
 
       {loadErr && (
-        <div className="bg-red-900/50 px-4 py-2 text-sm text-red-200">
+        <div className="bg-red-900/50 light:border light:border-red-300 light:bg-red-100 px-4 py-2 text-sm text-red-200 light:text-red-800">
           Failed to load data: {loadErr}. Did you run <code>npm run build-index</code>?
         </div>
       )}
@@ -548,7 +559,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setMapCollapsed(false)}
-              className="flex w-full items-center justify-center gap-1 border-gh-border border-b bg-gh-surface px-3 py-2 text-gh-muted text-xs hover:text-white lg:hidden"
+              className="flex w-full items-center justify-center gap-1 border-gh-border border-b bg-gh-surface px-3 py-2 text-gh-muted text-xs hover:text-gh-fg lg:hidden"
             >
               Show map ▾
             </button>
@@ -565,12 +576,13 @@ export default function App() {
               mapClickMode={mapClickTarget !== null}
               heatmap={heatmap}
               overlay={overlay}
+              dark={dark}
             />
             {/* Mobile-only: collapse the map to free the screen for the list. */}
             <button
               type="button"
               onClick={() => setMapCollapsed(true)}
-              className="absolute top-2 left-2 z-30 rounded-full bg-gh-surface/90 px-2.5 py-1 text-white text-xs shadow-lg hover:bg-gh-border lg:hidden"
+              className="absolute top-2 left-2 z-30 rounded-full bg-gh-surface/90 px-2.5 py-1 text-gh-fg text-xs shadow-lg hover:bg-gh-border lg:hidden"
             >
               Hide map ▴
             </button>
@@ -616,7 +628,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={clearTrip}
-                      className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-red-300"
+                      className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-red-300 light:hover:text-red-600"
                       title="Clear the current trip and start over"
                     >
                       Clear
@@ -635,7 +647,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setSetupCollapsed(false)}
-                        className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-white text-xs hover:bg-gh-border"
+                        className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-fg text-xs hover:bg-gh-border"
                       >
                         Edit
                       </button>
@@ -644,7 +656,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setSetupCollapsed(true)}
-                      className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-white"
+                      className="shrink-0 rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-gh-fg"
                     >
                       Hide
                     </button>

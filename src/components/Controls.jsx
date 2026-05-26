@@ -32,7 +32,7 @@ export default function Controls({
           max={10}
           value={cap}
           onChange={(e) => setCap(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
-          className="w-16 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white"
+          className="w-16 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-gh-fg"
         />
       </label>
 
@@ -70,7 +70,7 @@ export default function Controls({
               className={`rounded px-2 py-1 ${
                 scheduleMode === k
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gh-subtle text-gh-muted hover:text-white'
+                  : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'
               }`}
             >
               {label}
@@ -82,7 +82,7 @@ export default function Controls({
             type="datetime-local"
             value={scheduleAt ?? ''}
             onChange={(e) => setScheduleAt?.(e.target.value)}
-            className="mt-2 w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-white text-xs"
+            className="mt-2 w-full rounded border border-gh-border bg-gh-canvas px-2 py-1 text-gh-fg text-xs"
           />
         )}
       </div>

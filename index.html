@@ -1,9 +1,20 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CTA Bus Bingo</title>
+    <!-- Apply the saved/system theme before paint so there's no flash. Dark is
+         the CSS default; add the `light` class when light mode is in effect. -->
+    <script>
+      (function () {
+        try {
+          var s = localStorage.getItem('theme');
+          var light = s ? s === 'light' : window.matchMedia('(prefers-color-scheme: light)').matches;
+          if (light) document.documentElement.classList.add('light');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="description" content="Plan a Chicago trip that chains together as many unridden CTA bus routes as possible." />
     <meta name="theme-color" content="#0d1117" />
 
