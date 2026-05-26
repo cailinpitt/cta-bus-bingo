@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Achievements from './components/Achievements.jsx';
 import Controls from './components/Controls.jsx';
 import Itinerary from './components/Itinerary.jsx';
 import ProgressPanel from './components/ProgressPanel.jsx';
@@ -728,6 +729,7 @@ export default function App() {
                 heatmapOn={heatmapOn}
                 setHeatmapOn={setHeatmapOn}
               />
+              <Achievements routes={dataset.routes} ridden={ridden} />
               <ScheduleLookup routes={dataset.routes} />
               <RouteOverlayPanel
                 routes={dataset.routes}
