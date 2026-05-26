@@ -5,7 +5,7 @@
 // pattern ids + scalars — leg geometry is rehydrated against the in-memory
 // dataset on load, so it stays small and never serializes Maps/Sets.
 
-export function serializePlan({ result, selectedTrip, inputs }) {
+export function serializePlan({ result, selectedTrip, inputs, ridingLegIdx = null }) {
   if (!result) return null;
   const serializeTrip = (t) => ({
     totalSeconds: t.totalSeconds,
@@ -31,6 +31,7 @@ export function serializePlan({ result, selectedTrip, inputs }) {
   return {
     inputs, // { start, end, cap, roundTrip, scheduleMode, scheduleAt } at plan time
     selectedTrip,
+    ridingLegIdx, // which leg the user is currently riding (null = not in ride mode)
     start: result.start ?? null,
     end: result.end ?? null,
     suggestedStart: sug

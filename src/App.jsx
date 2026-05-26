@@ -4,6 +4,7 @@ import Controls from './components/Controls.jsx';
 import Itinerary from './components/Itinerary.jsx';
 import ProgressPanel from './components/ProgressPanel.jsx';
 import RiddenList from './components/RiddenList.jsx';
+import RideMode from './components/RideMode.jsx';
 import RouteOverlayPanel from './components/RouteOverlayPanel.jsx';
 import ScheduleLookup from './components/ScheduleLookup.jsx';
 import StartPicker from './components/StartPicker.jsx';
@@ -144,6 +145,9 @@ export default function App() {
   const [scheduleAt, setScheduleAt] = useState(initialUrl.scheduleAt ?? null);
   const [result, setResult] = useState(null); // { trips, suggestedStart }
   const [selectedTrip, setSelectedTrip] = useState(0);
+  // Ride mode: which leg of the current trip the user is currently on. null when
+  // not riding. Persisted in the plan snapshot so a reload returns to the same step.
+  const [ridingLegIdx, setRidingLegIdx] = useState(null);
   const [busy, setBusy] = useState(false);
   // Which picker is requesting map clicks: 'start' | 'end' | null.
   const [mapClickTarget, setMapClickTarget] = useState(null);
@@ -238,6 +242,7 @@ export default function App() {
         setSelectedTrip(
           Math.min(saved.selectedTrip || 0, Math.max(0, rehydrated.trips.length - 1)),
         );
+        setRidingLegIdx(saved.ridingLegIdx ?? null);
         return;
       }
     }
@@ -256,9 +261,10 @@ export default function App() {
         result,
         selectedTrip,
         inputs: { start, end, cap, roundTrip, scheduleMode, scheduleAt },
+        ridingLegIdx,
       }),
     );
-  }, [result, selectedTrip, start, end, cap, roundTrip, scheduleMode, scheduleAt]);
+  }, [result, selectedTrip, start, end, cap, roundTrip, scheduleMode, scheduleAt, ridingLegIdx]);
 
   // Translate a full next-Set from the UI into timestamped LWW-Map updates:
   // routes newly present become { r:1 }, routes dropped become { r:0 } tombstones
@@ -336,7 +342,9 @@ export default function App() {
     if (!dataset || !startPt) return;
     const endPt = endOverride !== undefined ? endOverride : end;
     setBusy(true);
-    // Starting a trip exits compare-routes mode (mutually exclusive views).
+    // Starting a new plan resets ride mode (the legs are about to change) and
+    // exits compare-routes mode (mutually exclusive views).
+    setRidingLegIdx(null);
     setOverlayRoutes(new Set());
     setOverlayColors(new Map());
     // Two rAFs guarantee the busy-state paint commits before the planner
@@ -394,10 +402,25 @@ export default function App() {
   function clearTrip() {
     setResult(null);
     setSelectedTrip(0);
+    setRidingLegIdx(null);
     setStart(null);
     setEnd(null);
     setRoundTripState(false);
     saveLastPlan(null);
+  }
+
+  // Ride-mode handlers. nextLeg/prevLeg clamp to valid indices; exit closes.
+  function startRiding() {
+    if (currentPlan?.legs?.length) setRidingLegIdx(0);
+  }
+  function exitRiding() {
+    setRidingLegIdx(null);
+  }
+  function nextLeg() {
+    setRidingLegIdx((i) => Math.min((currentPlan?.legs?.length ?? 1) - 1, (i ?? 0) + 1));
+  }
+  function prevLeg() {
+    setRidingLegIdx((i) => Math.max(0, (i ?? 0) - 1));
   }
 
   // Plan toward the community area with the most routes you haven't ridden — a
@@ -601,6 +624,7 @@ export default function App() {
               heatmap={heatmap}
               overlay={overlay}
               dark={dark}
+              focusLegIdx={ridingLegIdx}
             />
             {/* Mobile-only: collapse the map to free the screen for the list. */}
             <button
@@ -629,7 +653,17 @@ export default function App() {
           </div>
         </main>
         <aside className="flex w-full shrink-0 flex-col gap-3 p-3 lg:order-1 lg:w-96 lg:overflow-y-auto lg:border-gh-border lg:border-r">
-          {ready && (
+          {ready && ridingLegIdx != null && currentPlan?.legs?.length && (
+            <RideMode
+              plan={currentPlan}
+              routes={dataset.routes}
+              legIdx={ridingLegIdx}
+              onPrev={prevLeg}
+              onNext={nextLeg}
+              onExit={exitRiding}
+            />
+          )}
+          {ready && ridingLegIdx == null && (
             <>
               <div className="rounded-lg border border-gh-border bg-gh-surface text-sm">
                 <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -740,6 +774,7 @@ export default function App() {
                 onMarkRidden={setRidden}
                 start={start}
                 end={end}
+                onStartRiding={currentPlan?.legs?.length ? startRiding : undefined}
                 onUseSuggestion={(sug) => {
                   setStart({
                     lat: sug.stop.lat,

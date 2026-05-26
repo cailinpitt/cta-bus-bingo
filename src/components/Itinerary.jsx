@@ -12,6 +12,7 @@ export default function Itinerary({
   onMarkRidden,
   start,
   end,
+  onStartRiding,
 }) {
   // Undo target — snapshot of the ridden set immediately *before* the most
   // recent mark action. Cleared on any subsequent plan change (parent unmounts
@@ -137,6 +138,15 @@ export default function Itinerary({
         <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 light:border-amber-300 light:bg-amber-50 px-2 py-1 text-amber-200 light:text-amber-800 text-xs">
           Couldn't loop back near your start — this is the closest round trip we could build.
         </div>
+      )}
+      {onStartRiding && (
+        <button
+          type="button"
+          onClick={onStartRiding}
+          className="mb-2 w-full rounded bg-blue-600 px-2 py-2 font-medium text-white text-sm hover:bg-blue-500"
+        >
+          🚌 Start riding
+        </button>
       )}
       {/* Numbered timeline: each step's badge is the take-order, connected by a
           path with a down-arrow so the bus sequence reads at a glance. */}

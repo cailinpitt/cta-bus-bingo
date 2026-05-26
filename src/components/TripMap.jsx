@@ -188,6 +188,7 @@ export default function TripMap({
   heatmap,
   overlay,
   dark = true,
+  focusLegIdx = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -470,20 +471,35 @@ export default function TripMap({
         map.getSource('walks')?.setData(walkGeoJSON(plan, end));
         map.getSource('stops')?.setData(stopGeoJSON(plan, routes));
 
-        // Fit to plan bounds.
-        const allPts = [];
-        if (start) allPts.push([start.lon, start.lat]);
-        if (end) allPts.push([end.lon, end.lat]);
-        for (const l of plan.legs) {
-          allPts.push([l.boardStop.lon, l.boardStop.lat]);
-          allPts.push([l.alightStop.lon, l.alightStop.lat]);
-        }
-        if (allPts.length >= 2) {
-          const bounds = allPts.reduce(
-            (b, p) => b.extend(p),
-            new maplibregl.LngLatBounds(allPts[0], allPts[0]),
-          );
-          map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
+        // Ride mode: zoom to just the current leg's polyline.
+        const focus = focusLegIdx != null ? plan.legs[focusLegIdx] : null;
+        if (focus) {
+          const pts = focus.pattern.points
+            .filter((p) => p.seq >= focus.boardStop.seq && p.seq <= focus.alightStop.seq)
+            .map((p) => [p.lon, p.lat]);
+          if (pts.length >= 2) {
+            const b = pts.reduce(
+              (acc, p) => acc.extend(p),
+              new maplibregl.LngLatBounds(pts[0], pts[0]),
+            );
+            map.fitBounds(b, { padding: 80, maxZoom: 15, duration: 600 });
+          }
+        } else {
+          // Fit to the whole plan.
+          const allPts = [];
+          if (start) allPts.push([start.lon, start.lat]);
+          if (end) allPts.push([end.lon, end.lat]);
+          for (const l of plan.legs) {
+            allPts.push([l.boardStop.lon, l.boardStop.lat]);
+            allPts.push([l.alightStop.lon, l.alightStop.lat]);
+          }
+          if (allPts.length >= 2) {
+            const bounds = allPts.reduce(
+              (acc, p) => acc.extend(p),
+              new maplibregl.LngLatBounds(allPts[0], allPts[0]),
+            );
+            map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
+          }
         }
       } else {
         map.getSource('legs')?.setData(empty);
@@ -517,7 +533,7 @@ export default function TripMap({
     // and gets stuck waiting for an event that's never coming again.
     if (map.getSource('legs')) apply();
     else map.once('load', apply);
-  }, [plan, start, end, routes, heatmap, overlay]);
+  }, [plan, start, end, routes, heatmap, overlay, focusLegIdx]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
