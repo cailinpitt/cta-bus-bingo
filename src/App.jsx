@@ -729,7 +729,11 @@ export default function App() {
                 heatmapOn={heatmapOn}
                 setHeatmapOn={setHeatmapOn}
               />
-              <Achievements routes={dataset.routes} ridden={ridden} />
+              <Achievements
+                routes={dataset.routes}
+                ridden={ridden}
+                neighborhoods={dataset.neighborhoods}
+              />
               <ScheduleLookup routes={dataset.routes} />
               <RouteOverlayPanel
                 routes={dataset.routes}

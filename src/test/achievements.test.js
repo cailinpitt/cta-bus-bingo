@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { countAchievements, countCardContent } from '../lib/achievements.js';
+import {
+  countAchievements,
+  countCardContent,
+  neighborhoodAchievements,
+  neighborhoodCardContent,
+} from '../lib/achievements.js';
 
 describe('countAchievements', () => {
   it('marks milestones at/below the ridden count as earned', () => {
@@ -35,5 +40,32 @@ describe('countCardContent', () => {
     const c = countCardContent(123, { total: 123, isAll: true });
     expect(c.ring.big).toBe('✓');
     expect(c.ring.value).toBe(123);
+  });
+});
+
+describe('neighborhoodAchievements', () => {
+  const areas = [
+    { name: 'Hegewisch', routes: ['30'] },
+    { name: 'Rogers Park', routes: ['22', '36', '147'] },
+  ];
+
+  it('earns an area only when every serving route is ridden', () => {
+    const a = neighborhoodAchievements(new Set(['30', '22']), areas);
+    const heg = a.find((h) => h.name === 'Hegewisch');
+    const rp = a.find((h) => h.name === 'Rogers Park');
+    expect(heg.earned).toBe(true);
+    expect(rp.earned).toBe(false);
+    expect(rp.riddenCount).toBe(1);
+    expect(rp.remaining).toBe(2);
+  });
+
+  it('handles empty/absent areas', () => {
+    expect(neighborhoodAchievements(new Set(), undefined)).toEqual([]);
+  });
+
+  it('builds a completion card naming the area', () => {
+    const c = neighborhoodCardContent({ name: 'Rogers Park', routes: ['22', '36', '147'] });
+    expect(c.title).toBe('Rogers Park — bingo!');
+    expect(c.ring).toEqual({ value: 3, max: 3, big: '3', label: 'routes' });
   });
 });

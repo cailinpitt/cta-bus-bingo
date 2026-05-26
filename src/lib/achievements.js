@@ -43,3 +43,31 @@ export function countCardContent(threshold, { total, isAll }) {
     ring: { value: threshold, max: total, big: String(threshold), label: 'routes' },
   };
 }
+
+// Per-community-area achievements: ride every bus route serving the area.
+// `areas` is the baked neighborhoods list ({ name, routes, center }).
+export function neighborhoodAchievements(ridden, areas) {
+  return (areas || []).map((a) => {
+    const riddenCount = a.routes.filter((rt) => ridden.has(rt)).length;
+    return {
+      id: `hood-${a.name}`,
+      kind: 'hood',
+      name: a.name,
+      routes: a.routes,
+      total: a.routes.length,
+      riddenCount,
+      remaining: a.routes.length - riddenCount,
+      earned: a.routes.length > 0 && riddenCount === a.routes.length,
+    };
+  });
+}
+
+// Share-card content for a completed community area.
+export function neighborhoodCardContent(area) {
+  const n = area.routes.length;
+  return {
+    title: `${area.name} — bingo!`,
+    sub: `Rode all ${n} CTA bus route${n === 1 ? '' : 's'} serving ${area.name}`,
+    ring: { value: n, max: n, big: String(n), label: 'routes' },
+  };
+}

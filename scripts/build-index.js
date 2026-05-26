@@ -20,6 +20,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { buildGtfsIndex } from './build-gtfs-index.js';
+import { buildNeighborhoods } from './build-neighborhoods.js';
 import { buildTrains } from './build-trains.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -167,6 +168,14 @@ async function main() {
       trainStopCount: trainStops,
     }),
   );
+  // Bake the community-area → routes mapping for neighborhood achievements.
+  // Non-fatal: a transient city-data outage shouldn't sink the whole refresh.
+  try {
+    await buildNeighborhoods();
+  } catch (e) {
+    console.warn(`  neighborhoods skipped: ${e.message}`);
+  }
+
   console.log(
     `done: ${Object.keys(routes).length} routes (${Object.keys(trains.routes).length} train lines), ${skipped} skipped`,
   );

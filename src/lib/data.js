@@ -70,7 +70,7 @@ export function shapeDataset({ routes, routePatterns, patternList, meta = null }
 export async function loadDataset(base = `${import.meta.env.BASE_URL}data`) {
   if (cached) return cached;
 
-  const [routes, routePatterns, meta, bundledPatterns] = await Promise.all([
+  const [routes, routePatterns, meta, bundledPatterns, neighborhoods] = await Promise.all([
     fetch(`${base}/routes.json`).then((r) => r.json()),
     fetch(`${base}/route-patterns.json`).then((r) => r.json()),
     fetch(`${base}/meta.json`).then((r) => r.json()),
@@ -78,10 +78,16 @@ export async function loadDataset(base = `${import.meta.env.BASE_URL}data`) {
     // cold-load win on mobile networks (gzipped ~1.5 MB vs 339 tiny
     // sequential requests).
     fetch(`${base}/patterns.json`).then((r) => r.json()),
+    // Community-area → routes mapping for neighborhood achievements. Optional —
+    // older data builds may not have it, so don't fail the whole load.
+    fetch(`${base}/neighborhoods.json`)
+      .then((r) => (r.ok ? r.json() : { areas: [] }))
+      .catch(() => ({ areas: [] })),
   ]);
 
   const patternList = Object.values(bundledPatterns);
   cached = shapeDataset({ routes, routePatterns, patternList, meta });
+  cached.neighborhoods = neighborhoods.areas ?? [];
   return cached;
 }
 
