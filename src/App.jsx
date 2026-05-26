@@ -738,6 +738,8 @@ export default function App() {
                 routes={dataset.routes}
                 ridden={ridden}
                 onMarkRidden={setRidden}
+                start={start}
+                end={end}
                 onUseSuggestion={(sug) => {
                   setStart({
                     lat: sug.stop.lat,

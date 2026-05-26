@@ -1,13 +1,34 @@
 // Per-leg list with times. Colors must match TripMap's palette.
 import { useEffect, useState } from 'react';
+import { itineraryToText, shareText } from '../lib/shareItinerary.js';
 import { fmtMin, fmtWalkDistance } from '../lib/units.js';
 import { colorForLeg } from './TripMap.jsx';
 
-export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMarkRidden }) {
+export default function Itinerary({
+  plan,
+  routes,
+  onUseSuggestion,
+  ridden,
+  onMarkRidden,
+  start,
+  end,
+}) {
   // Undo target — snapshot of the ridden set immediately *before* the most
   // recent mark action. Cleared on any subsequent plan change (parent unmounts
   // or re-renders with a new plan key).
   const [undoSnapshot, setUndoSnapshot] = useState(null);
+  const [shareStatus, setShareStatus] = useState(null); // null | 'shared' | 'copied'
+
+  async function handleShareSteps() {
+    const text = itineraryToText(plan, routes, { start, end });
+    if (!text) return;
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const status = await shareText({ text, url });
+    if (status === 'shared' || status === 'copied') {
+      setShareStatus(status);
+      setTimeout(() => setShareStatus(null), 1500);
+    }
+  }
   // Reset undo state when the plan identity changes — re-planning shouldn't
   // leave a stale "Marked N — Undo" banner pointing at the previous trip.
   const planKey = plan?.legs?.map((l) => l.rt).join(',');
@@ -52,7 +73,21 @@ export default function Itinerary({ plan, routes, onUseSuggestion, ridden, onMar
             </span>
           )}
         </span>
-        <span className="font-medium text-gh-fg">~{fmtMin(plan.totalSeconds)} total</span>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gh-fg">~{fmtMin(plan.totalSeconds)} total</span>
+          <button
+            type="button"
+            onClick={handleShareSteps}
+            className="rounded bg-gh-subtle px-2 py-0.5 text-gh-muted text-xs hover:text-gh-fg"
+            title="Share the itinerary as text (with the trip link)"
+          >
+            {shareStatus === 'copied'
+              ? 'Copied!'
+              : shareStatus === 'shared'
+                ? 'Shared!'
+                : '📋 Share steps'}
+          </button>
+        </div>
       </div>
       {onMarkRidden &&
         ridden &&
