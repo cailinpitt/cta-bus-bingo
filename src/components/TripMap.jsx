@@ -398,10 +398,14 @@ export default function TripMap({
         const f = e.features?.[0];
         if (!f) return;
         const label = f.properties?.label ?? '';
+        // Theme the tooltip to match light/dark (read live via the ref).
+        const t = darkRef.current
+          ? { bg: '#161b22', fg: '#ffffff', bd: '#30363d' }
+          : { bg: '#ffffff', fg: '#0f172a', bd: '#cbd5e1' };
         popup
           .setLngLat(f.geometry.coordinates)
           .setHTML(
-            `<div style="background:#161b22;color:#fff;border:1px solid #30363d;padding:4px 8px;border-radius:4px;font-size:12px;white-space:nowrap;">${escapeHtml(label)}</div>`,
+            `<div style="background:${t.bg};color:${t.fg};border:1px solid ${t.bd};padding:4px 8px;border-radius:4px;font-size:12px;white-space:nowrap;">${escapeHtml(label)}</div>`,
           )
           .addTo(map);
       });

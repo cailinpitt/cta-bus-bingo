@@ -19,6 +19,10 @@ export function useTheme() {
 
   useEffect(() => {
     document.documentElement.classList.toggle('light', !dark);
+    // Keep the browser UI (address bar / status bar) in sync with the theme.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', dark ? '#0d1117' : '#f1f5f9');
     try {
       localStorage.setItem('theme', dark ? 'dark' : 'light');
     } catch {
