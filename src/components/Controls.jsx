@@ -19,6 +19,8 @@ export default function Controls({
   onPlan,
   busy,
   canPlan,
+  onPlanCoverage,
+  canPlanCoverage,
 }) {
   return (
     <div className="rounded-lg border border-gh-border bg-gh-surface p-3 text-sm">
@@ -114,6 +116,22 @@ export default function Controls({
         )}
         <span>{busy ? 'Planning your trip…' : 'Plan trip'}</span>
       </button>
+
+      {onPlanCoverage && (
+        <button
+          type="button"
+          onClick={onPlanCoverage}
+          disabled={!canPlanCoverage}
+          title={
+            canPlanCoverage
+              ? 'Plan a trip toward the community area where you have the most unridden routes'
+              : 'Pick a starting point first'
+          }
+          className="mt-2 w-full rounded bg-gh-subtle px-3 py-1.5 text-gh-muted text-xs hover:text-gh-fg disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Plan toward my least-covered area
+        </button>
+      )}
     </div>
   );
 }

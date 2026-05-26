@@ -11,6 +11,7 @@ import SyncPanel from './components/SyncPanel.jsx';
 import TripMap, { OVERLAY_PALETTE } from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
 import { useTheme } from './hooks/useTheme.js';
+import { leastCoveredArea } from './lib/coverage.js';
 import { loadDataset } from './lib/data.js';
 import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
 import { rehydratePlan, serializePlan } from './lib/planSnapshot.js';
@@ -331,8 +332,9 @@ export default function App() {
   // against a freshly chosen point without waiting for setState to flush.
   // `randomTrip` selects a random candidate instead of the top-ranked one — the
   // "surprise" in Surprise me.
-  function planFromStart(startPt, { randomTrip = false } = {}) {
+  function planFromStart(startPt, { randomTrip = false, endOverride } = {}) {
     if (!dataset || !startPt) return;
+    const endPt = endOverride !== undefined ? endOverride : end;
     setBusy(true);
     // Starting a trip exits compare-routes mode (mutually exclusive views).
     setOverlayRoutes(new Set());
@@ -352,7 +354,7 @@ export default function App() {
         const r = planTrips({
           dataset,
           start: { lat: startPt.lat, lon: startPt.lon },
-          end: end ? { lat: end.lat, lon: end.lon } : null,
+          end: endPt ? { lat: endPt.lat, lon: endPt.lon } : null,
           ridden,
           cap,
           roundTrip,
@@ -397,6 +399,27 @@ export default function App() {
     setRoundTripState(false);
     saveLastPlan(null);
   }
+
+  // Plan toward the community area with the most routes you haven't ridden — a
+  // "fill in the map" mode that pairs with the coverage heatmap.
+  function planToLeastCovered() {
+    if (!start || !dataset?.neighborhoods?.length) return;
+    const target = leastCoveredArea(ridden, dataset.neighborhoods, start);
+    if (!target) return;
+    const endPt = {
+      lat: target.center[0],
+      lon: target.center[1],
+      label: `${target.name} · ${target.unridden} new`,
+    };
+    setEnd(endPt);
+    setRoundTripState(false);
+    planFromStart(start, { endOverride: endPt });
+  }
+
+  const hasCoverageGap = useMemo(
+    () => (dataset?.neighborhoods || []).some((a) => a.routes.some((rt) => !ridden.has(rt))),
+    [dataset, ridden],
+  );
 
   const ready = !!dataset && !!stopIndexRef.current;
   const meta = dataset?.meta;
@@ -697,6 +720,8 @@ export default function App() {
                       onPlan={handlePlan}
                       busy={busy}
                       canPlan={!!start}
+                      onPlanCoverage={planToLeastCovered}
+                      canPlanCoverage={!!start && hasCoverageGap && !busy}
                     />
                   </div>
                 )}
