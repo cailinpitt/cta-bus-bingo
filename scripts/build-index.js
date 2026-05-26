@@ -22,6 +22,7 @@ import 'dotenv/config';
 import { buildGtfsIndex } from './build-gtfs-index.js';
 import { buildNeighborhoods } from './build-neighborhoods.js';
 import { buildTrains } from './build-trains.js';
+import { matchPatternDirection } from './match-pattern-direction.js';
 import { slimPattern } from './slim-patterns.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -111,6 +112,16 @@ async function main() {
     if (patterns.length) {
       routePatterns[rt] = patterns.map((p) => String(p.pid));
       for (const p of patterns) {
+        // Tag each pattern with its GTFS direction so the runtime can read
+        // direction-specific headways/durations instead of medianing across.
+        const stops = p.points.filter((pt) => pt.type === 'S');
+        if (stops.length) {
+          p.gtfsDirectionId = matchPatternDirection(
+            stops[0].stopId,
+            stops[stops.length - 1].stopId,
+            gtfs.endpoints?.bus?.[rt],
+          );
+        }
         writeFileSync(resolve(OUT_PATTERNS, `${p.pid}.json`), JSON.stringify(slimPattern(p)));
       }
       fetched++;

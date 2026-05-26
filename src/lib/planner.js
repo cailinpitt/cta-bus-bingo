@@ -141,14 +141,15 @@ function expandReachable({ point, dataset, ridden, scheduleOk, now, stopIndex, a
       const route = routes[rt];
       if (!isFreeConnector(route, rt, ridden)) continue;
       if (!scheduleOk.get(rt)) continue;
-      const headway = headwayMinutes(route.gtfs, now) ?? 8;
-      const waitSec = (headway * 60) / 2;
 
       for (const pid of route.patternIds) {
         const p = patterns[pid];
         if (!p) continue;
         const boardIdx = p.stopIdToIdx.get(board.stopId) ?? -1;
         if (boardIdx < 0) continue;
+        // Headway is direction-aware (uses p.gtfsDirectionId when set).
+        const headway = headwayMinutes(route.gtfs, p, now) ?? 8;
+        const waitSec = (headway * 60) / 2;
 
         let strideCount = 0;
         for (const alightIdx of alightsAfter(p, boardIdx, MAX_FREE_RIDE_FT)) {
@@ -214,7 +215,7 @@ function legTimeSeconds({ pattern, boardIdx, alightIdx }, gtfs, now) {
   // median CTA bus headway; matches the connector fallback in expandReachable
   // and appendBridgeToEnd so the same unknown-headway route isn't priced
   // differently in different phases of planning.
-  const headwayMin = headwayMinutes(gtfs, now) ?? 8;
+  const headwayMin = headwayMinutes(gtfs, pattern, now) ?? 8;
   const waitMin = headwayMin / 2;
   return (rideMin + waitMin) * 60;
 }
@@ -701,14 +702,15 @@ function appendBridgeToEnd({
         if (!route.isTrain && !usedRoutes.has(rt)) continue;
         if (!route.isTrain && rt === lastBusRoute) continue;
         if (!scheduleOk.get(rt)) continue;
-        const headway = headwayMinutes(route.gtfs, now) ?? 8;
-        const waitSec = (headway * 60) / 2;
 
         for (const pid of route.patternIds) {
           const p = patterns[pid];
           if (!p) continue;
           const boardIdx = p.stopIdToIdx.get(board.stopId) ?? -1;
           if (boardIdx < 0) continue;
+          // Headway is direction-aware (uses p.gtfsDirectionId when set).
+          const headway = headwayMinutes(route.gtfs, p, now) ?? 8;
+          const waitSec = (headway * 60) / 2;
           const minPerFt = minutesPerFoot(route.gtfs, p, now);
 
           // No stride sampling here — the bridge runs at most MAX_BRIDGE_HOPS

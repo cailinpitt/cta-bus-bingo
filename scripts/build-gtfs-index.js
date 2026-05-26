@@ -338,7 +338,21 @@ export async function buildGtfsIndex() {
   const routeMode = new Map();
   for (const meta of tripMeta.values()) routeMode.set(meta.route, meta.mode);
 
-  const out = { generatedAt: Date.now(), routes: {}, lines: {}, names, busRouteIds };
+  // Per-route per-direction endpoints (the dominant origin + destination stop
+  // ids). Consumed by the offline pattern → GTFS-direction matcher so the
+  // runtime can read headways/durations for the actual ride direction instead
+  // of a median across both.
+  const endpoints = { bus: {} };
+  for (const [k, origin] of busDominantOrigin) {
+    const [route, dir] = k.split('|');
+    (endpoints.bus[route] ??= {})[dir] = { ...(endpoints.bus[route]?.[dir] || {}), origin };
+  }
+  for (const [k, dest] of busDominantDest) {
+    const [route, dir] = k.split('|');
+    (endpoints.bus[route] ??= {})[dir] = { ...(endpoints.bus[route]?.[dir] || {}), dest };
+  }
+
+  const out = { generatedAt: Date.now(), routes: {}, lines: {}, names, busRouteIds, endpoints };
   for (const [key, times] of buckets) {
     if (times.length < 2) continue;
     const [route, dir, dayType, hourStr] = key.split('|');

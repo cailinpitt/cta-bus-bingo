@@ -18,7 +18,8 @@ export default function RideMode({ plan, routes, legIdx, onPrev, onNext, onExit 
   const routeLabel = isTrain
     ? route?.name || leg.rt
     : `${leg.rt}${route?.name ? ` ${route.name}` : ''}`;
-  const headway = !leg.free && route?.gtfs ? headwayMinutes(route.gtfs, new Date()) : null;
+  const headway =
+    !leg.free && route?.gtfs ? headwayMinutes(route.gtfs, leg.pattern, new Date()) : null;
 
   const isFirst = idx === 0;
   const isLast = idx === total - 1;

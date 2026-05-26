@@ -115,17 +115,24 @@ function median(nums) {
   return s[Math.floor(s.length / 2)];
 }
 
-// Headway (minutes) for a route at this hour. We can't map a ride's compass
-// direction to a GTFS direction_id (the baked data doesn't carry that link), so
-// we take the MEDIAN of the directions' nearest-hour headways rather than the
-// optimistic min-across-directions. The min understated the wait whenever the
-// boarded direction was the less-frequent one; the two directions of a route are
-// usually within a minute or two, so the median is the representative wait.
-// Falls back to nearby hours within ±2 per direction if the exact hour is missing.
-export function headwayMinutes(gtfs, now) {
+// Headway (minutes). When the caller passes a pattern with a matched
+// `gtfsDirectionId`, we read only that direction's headway — the actual wait
+// for the ride being priced. When the direction isn't known (older builds, or
+// trains), we fall back to the median across directions.
+// Falls back to nearby hours within ±2 if the exact hour is missing.
+export function headwayMinutes(gtfs, pattern, now) {
+  if (now === undefined && pattern instanceof Date) {
+    // Back-compat: old (gtfs, now) signature.
+    now = pattern;
+    pattern = null;
+  }
   if (!gtfs) return null;
   const dayType = dayTypeKey(now);
   const hour = now.getHours();
+  const dirId = pattern?.gtfsDirectionId;
+  if (dirId != null && gtfs[dirId]) {
+    return nearestHourValue(gtfs[dirId]?.headways?.[dayType], hour);
+  }
   const samples = [];
   for (const d of Object.values(gtfs)) {
     const v = nearestHourValue(d?.headways?.[dayType], hour);
@@ -198,6 +205,17 @@ export function minutesPerFoot(gtfs, pattern, now) {
   const dayType = dayTypeKey(now);
   const hour = now.getHours();
   const ceil = isTrain ? MAX_TRAIN_FT_PER_MIN : MAX_BUS_FT_PER_MIN;
+  const dirId = pattern.gtfsDirectionId;
+  // If we know which GTFS direction the ride is in, read only that direction —
+  // far more accurate for routes with rush-hour asymmetry than medianing both.
+  if (dirId != null && gtfs[dirId]) {
+    const dur = nearestHourValue(gtfs[dirId]?.durations?.[dayType], hour);
+    if (dur != null) {
+      const ftPerMin = pattern.lengthFt / dur;
+      if (ftPerMin <= ceil) return dur / pattern.lengthFt;
+    }
+    return fallback;
+  }
   const samples = [];
   for (const d of Object.values(gtfs)) {
     const dur = nearestHourValue(d?.durations?.[dayType], hour);
