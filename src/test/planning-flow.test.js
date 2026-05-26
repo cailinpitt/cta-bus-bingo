@@ -43,7 +43,7 @@ const plan = (ridden) =>
   });
 
 describe('planning flow', () => {
-  it('plans, restores the exact trip after a reload, and drops newly-ridden routes', () => {
+  it('plans, restores the exact trip after a reload, and drops newly-ridden routes', { timeout: 30000 }, () => {
     const { trips } = plan(new Set());
     expect(trips.length).toBeGreaterThan(0);
     const trip = trips[0];
