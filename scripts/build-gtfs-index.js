@@ -126,29 +126,23 @@ function dayTypeFor(cal) {
   return null;
 }
 
-// Honors calendar.txt date ranges + calendar_dates.txt exceptions for today, so
-// the index reflects the schedule currently in effect.
-function resolveServiceDayTypes({ calendars, calendarDates, todayStr, todayDow }) {
-  const addForToday = new Set();
-  const removeForToday = new Set();
-  for (const r of calendarDates) {
-    if (r.date !== todayStr) continue;
-    if (r.exception_type === '1') addForToday.add(r.service_id);
-    else if (r.exception_type === '2') removeForToday.add(r.service_id);
-  }
+// Map each service_id active in today's calendar window to its day-type
+// (weekday / saturday / sunday). The day-type buckets represent *typical*
+// service for that day-type, so we deliberately do NOT honor today's
+// calendar_dates exceptions: removing weekday services that are excepted out for
+// a holiday (e.g. Memorial Day) on the rebuild date would silently wipe the
+// weekday bucket for a whole week; adding event-day services (e.g. United
+// Center game days) would let them leak into the bucket every day. The runtime
+// holiday-aware dayTypeKey handles per-date day-type selection.
+function resolveServiceDayTypes({ calendars, todayStr }) {
   const out = new Map();
   for (const c of calendars) {
     const dt = dayTypeFor(c);
     if (!dt) continue;
     if (todayStr < c.start_date || todayStr > c.end_date) continue;
-    if (removeForToday.has(c.service_id)) continue;
     out.set(c.service_id, dt);
   }
-  if (addForToday.size) {
-    const fallbackDt = todayDow === 'Sat' ? 'saturday' : todayDow === 'Sun' ? 'sunday' : 'weekday';
-    for (const sid of addForToday) if (!out.has(sid)) out.set(sid, fallbackDt);
-  }
-  return { serviceDayType: out, addForToday, removeForToday };
+  return { serviceDayType: out };
 }
 
 // Day-level dominant origin per (route, dir): garage pullouts / short-turns
@@ -209,22 +203,7 @@ export async function buildGtfsIndex() {
   const calendars = parseCsv(readFromZip('calendar.txt'));
   const today = new Date();
   const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-  let calendarDates = [];
-  try {
-    calendarDates = parseCsv(readFromZip('calendar_dates.txt'));
-  } catch (e) {
-    console.warn(`  no calendar_dates.txt (${e.message}) — proceeding without exceptions`);
-  }
-  const todayDow = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago',
-    weekday: 'short',
-  }).format(today);
-  const { serviceDayType } = resolveServiceDayTypes({
-    calendars,
-    calendarDates,
-    todayStr,
-    todayDow,
-  });
+  const { serviceDayType } = resolveServiceDayTypes({ calendars, todayStr });
 
   const busRouteSet = new Set(busRouteIds);
   const railRouteSet = new Set(railRouteIds);
@@ -246,12 +225,13 @@ export async function buildGtfsIndex() {
     });
   }
 
-  // First-stop departure + origin per trip (last-stop arrival for durations).
+  // First-stop departure + origin per trip (last-stop arrival/stop for durations).
   const firstDeparture = new Map();
   const firstSeq = new Map();
   const firstStopId = new Map();
   const lastArrival = new Map();
   const lastSeq = new Map();
+  const lastStopId = new Map();
   let header = null;
   let tripIdIdx = -1;
   let stopIdIdx = -1;
@@ -282,6 +262,7 @@ export async function buildGtfsIndex() {
     if (prevLast === undefined || seq > prevLast) {
       lastSeq.set(tripId, seq);
       lastArrival.set(tripId, parseGtfsTime(parts[arrIdx]));
+      lastStopId.set(tripId, parts[stopIdIdx]);
     }
   });
 
@@ -310,6 +291,17 @@ export async function buildGtfsIndex() {
     'bus',
     BUS_DOMINANCE_THRESHOLD,
   );
+  // Same dominance treatment, but on the trip's LAST stop — short-turns share
+  // the dominant origin so they pass the origin filter and pollute durations
+  // (e.g. 95th's dir-0 "full" run looks like 10 min at 10pm). Requiring the
+  // dominant destination too drops them at the source.
+  const railDominantDest = computeDominantOrigin(tripMeta, lastStopId, 'rail', null);
+  const busDominantDest = computeDominantOrigin(
+    tripMeta,
+    lastStopId,
+    'bus',
+    BUS_DOMINANCE_THRESHOLD,
+  );
 
   const buckets = new Map();
   const durationBuckets = new Map();
@@ -326,6 +318,11 @@ export async function buildGtfsIndex() {
         ? railDominantOrigin.get(`${meta.route}|${meta.dir}`)
         : busDominantOrigin.get(`${meta.route}|${meta.dir}`);
     if (domOrigin && firstStopId.get(tripId) !== domOrigin) continue;
+    const domDest =
+      meta.mode === 'rail'
+        ? railDominantDest.get(`${meta.route}|${meta.dir}`)
+        : busDominantDest.get(`${meta.route}|${meta.dir}`);
+    if (domDest && lastStopId.get(tripId) !== domDest) continue;
 
     const key = bucketKey(meta.route, meta.dir, meta.dayType, hour);
     if (!buckets.has(key)) buckets.set(key, []);
