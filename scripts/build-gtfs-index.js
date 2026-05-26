@@ -343,13 +343,18 @@ export async function buildGtfsIndex() {
   // runtime can read headways/durations for the actual ride direction instead
   // of a median across both.
   const endpoints = { bus: {} };
+  const setEndpoint = (route, dir, key, val) => {
+    if (!endpoints.bus[route]) endpoints.bus[route] = {};
+    if (!endpoints.bus[route][dir]) endpoints.bus[route][dir] = {};
+    endpoints.bus[route][dir][key] = val;
+  };
   for (const [k, origin] of busDominantOrigin) {
     const [route, dir] = k.split('|');
-    (endpoints.bus[route] ??= {})[dir] = { ...(endpoints.bus[route]?.[dir] || {}), origin };
+    setEndpoint(route, dir, 'origin', origin);
   }
   for (const [k, dest] of busDominantDest) {
     const [route, dir] = k.split('|');
-    (endpoints.bus[route] ??= {})[dir] = { ...(endpoints.bus[route]?.[dir] || {}), dest };
+    setEndpoint(route, dir, 'dest', dest);
   }
 
   const out = { generatedAt: Date.now(), routes: {}, lines: {}, names, busRouteIds, endpoints };

@@ -116,7 +116,9 @@ describe('planner invariants', () => {
     }
   });
 
-  it('round-trip plans actually return to start (real last leg, not just index cap-1)', { timeout: 30000 }, () => {
+  it('round-trip plans actually return to start (real last leg, not just index cap-1)', {
+    timeout: 30000,
+  }, () => {
     // Stress the early-termination path with a heavy ridden set + several starts.
     const allBus = Object.keys(dataset.routes).filter((r) => !dataset.routes[r].isTrain);
     const heavyRidden = new Set(allBus.filter((_, i) => i % 3 !== 0)); // ~2/3 ridden

@@ -39,7 +39,9 @@ function drawCentered(ctx, text, y, maxWidth, lineHeight, maxLines) {
   }
   if (line) lines.push(line);
   const shown = lines.slice(0, maxLines);
-  shown.forEach((l, i) => ctx.fillText(l, CX, y + i * lineHeight));
+  shown.forEach((l, i) => {
+    ctx.fillText(l, CX, y + i * lineHeight);
+  });
   return y + (shown.length - 1) * lineHeight;
 }
 
