@@ -22,6 +22,7 @@ import 'dotenv/config';
 import { buildGtfsIndex } from './build-gtfs-index.js';
 import { buildNeighborhoods } from './build-neighborhoods.js';
 import { buildTrains } from './build-trains.js';
+import { slimPattern } from './slim-patterns.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -110,7 +111,7 @@ async function main() {
     if (patterns.length) {
       routePatterns[rt] = patterns.map((p) => String(p.pid));
       for (const p of patterns) {
-        writeFileSync(resolve(OUT_PATTERNS, `${p.pid}.json`), JSON.stringify(p));
+        writeFileSync(resolve(OUT_PATTERNS, `${p.pid}.json`), JSON.stringify(slimPattern(p)));
       }
       fetched++;
     }
@@ -140,7 +141,7 @@ async function main() {
     routePatterns[rt] = r.patternIds;
   }
   for (const [pid, pattern] of Object.entries(trains.patterns)) {
-    writeFileSync(resolve(OUT_PATTERNS, `${pid}.json`), JSON.stringify(pattern));
+    writeFileSync(resolve(OUT_PATTERNS, `${pid}.json`), JSON.stringify(slimPattern(pattern)));
     trainStops += pattern.points.filter((p) => p.type === 'S').length;
   }
 

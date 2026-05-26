@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "build-index": "node scripts/build-index.js && node scripts/render-og.js",
     "build-neighborhoods": "node scripts/build-neighborhoods.js",
+    "slim-patterns": "node scripts/slim-patterns.js",
     "render-og": "node scripts/render-og.js",
     "render-icons": "node scripts/render-icons.js",
     "test": "vitest --passWithNoTests",
