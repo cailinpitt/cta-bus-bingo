@@ -14,14 +14,19 @@ function routeNum(rt) {
 }
 
 // Up to 8 route ids spread across `routeIds`, colored — the card's "marked squares".
+// Returns the truncated chip set + the count of routes that didn't fit, so the
+// renderer can append a "+N more" pill (otherwise a "25 routes" card showing 8
+// chips reads like only those 8 were ridden).
 function chipsFrom(routeIds) {
-  const n = Math.min(8, routeIds.length);
-  if (n === 0) return [];
+  const max = 8;
+  const n = Math.min(max, routeIds.length);
+  if (n === 0) return { chips: [], extra: 0 };
   const step = routeIds.length / n;
-  return Array.from({ length: n }, (_, i) => ({
+  const chips = Array.from({ length: n }, (_, i) => ({
     label: routeIds[Math.floor(i * step)],
     color: OVERLAY_PALETTE[i % OVERLAY_PALETTE.length],
   }));
+  return { chips, extra: Math.max(0, routeIds.length - n) };
 }
 
 // Earned badge: Share (native sheet) + ⬇ (direct download). Renders the same card.
@@ -68,10 +73,12 @@ export default function Achievements({ routes, ridden, neighborhoods = [] }) {
   }, [routes, ridden]);
 
   const milestones = useMemo(() => countAchievements(count, total), [count, total]);
-  const riddenChips = useMemo(() => {
+  // Sorted list of ridden bus routes — clamped per-milestone below so a
+  // "25 routes" card built from a 49-ride history shows only 25 routes' worth.
+  const riddenSorted = useMemo(() => {
     const rs = [...ridden].filter((rt) => routes[rt] && !routes[rt].isTrain);
     rs.sort((a, b) => routeNum(a) - routeNum(b) || a.localeCompare(b));
-    return chipsFrom(rs);
+    return rs;
   }, [ridden, routes]);
 
   const hoods = useMemo(
@@ -84,11 +91,17 @@ export default function Achievements({ routes, ridden, neighborhoods = [] }) {
     .sort((a, b) => a.remaining - b.remaining || b.riddenCount - a.riddenCount);
   const earnedCount = milestones.filter((m) => m.earned).length;
 
-  async function produce(content, chips, filenameBase, mode, id) {
+  async function produce(content, chipBundle, kind, filenameBase, mode, id) {
     setBusyId(id);
     try {
-      const footer = typeof window !== 'undefined' ? window.location.host : 'CTA Bus Bingo';
-      const blob = await renderShareCard({ ...content, chips, footer });
+      const footer = 'cailinpitt.github.io/cta-bus-bingo';
+      const blob = await renderShareCard({
+        ...content,
+        chips: chipBundle.chips,
+        extra: chipBundle.extra,
+        kind,
+        footer,
+      });
       const filename = `${filenameBase}.png`;
       if (mode === 'download') downloadImage(blob, filename);
       else await shareImage(blob, { filename, title: 'CTA Bus Bingo', text: content.title });
@@ -97,19 +110,30 @@ export default function Achievements({ routes, ridden, neighborhoods = [] }) {
     }
   }
 
-  const shareMilestone = (m, mode) =>
+  const shareMilestone = (m, mode) => {
+    const isAll = m.id === 'count-all';
+    const clamped = isAll ? riddenSorted : riddenSorted.slice(0, m.threshold);
     produce(
-      countCardContent(m.threshold, { total, isAll: m.id === 'count-all' }),
-      riddenChips,
+      countCardContent(m.threshold, { total, isAll }),
+      chipsFrom(clamped),
+      isAll ? 'all' : 'count',
       `bus-bingo-${m.threshold}`,
       mode,
       m.id,
     );
+  };
 
   const shareHood = (h, mode) => {
     const area = { name: h.name, routes: h.routes };
     const slug = h.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    produce(neighborhoodCardContent(area), chipsFrom(h.routes), `bus-bingo-${slug}`, mode, h.id);
+    produce(
+      neighborhoodCardContent(area),
+      chipsFrom(h.routes),
+      'hood',
+      `bus-bingo-${slug}`,
+      mode,
+      h.id,
+    );
   };
 
   const shownHoods = showAllHoods
