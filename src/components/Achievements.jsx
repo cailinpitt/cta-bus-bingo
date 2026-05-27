@@ -60,6 +60,7 @@ export default function Achievements({ routes, ridden, neighborhoods = [] }) {
   const [collapsed, setCollapsed] = useState(true);
   const [showAllHoods, setShowAllHoods] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [openHoodId, setOpenHoodId] = useState(null);
 
   const { count, total } = useMemo(() => {
     let total = 0;
@@ -201,28 +202,67 @@ export default function Achievements({ routes, ridden, neighborhoods = [] }) {
                 {shownHoods.map((h) => (
                   <div
                     key={h.id}
-                    className={`flex items-center gap-2 rounded border px-2 py-1.5 ${
+                    className={`rounded border ${
                       h.earned
                         ? 'border-emerald-600/50 bg-emerald-900/20 light:bg-emerald-50'
                         : 'border-gh-border bg-gh-canvas'
                     }`}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-gh-fg">{h.name}</div>
-                      <div className="text-gh-muted text-xs">
-                        {h.earned ? `all ${h.total} routes` : `${h.riddenCount}/${h.total} routes`}
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-gh-fg">{h.name}</div>
+                        <div className="text-gh-muted text-xs">
+                          {h.earned
+                            ? `all ${h.total} routes`
+                            : `${h.riddenCount}/${h.total} routes`}
+                        </div>
                       </div>
+                      {h.earned ? (
+                        <div className="w-28 shrink-0">
+                          <ShareButtons
+                            id={h.id}
+                            busyId={busyId}
+                            onAct={(mode) => shareHood(h, mode)}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="text-gh-muted text-xs">{h.remaining} to go</span>
+                          <button
+                            type="button"
+                            onClick={() => setOpenHoodId(openHoodId === h.id ? null : h.id)}
+                            aria-label="Show remaining routes"
+                            aria-expanded={openHoodId === h.id}
+                            className="flex h-5 w-5 items-center justify-center rounded-full border border-gh-border text-gh-muted text-xs hover:bg-gh-subtle hover:text-gh-fg"
+                          >
+                            i
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    {h.earned ? (
-                      <div className="w-28 shrink-0">
-                        <ShareButtons
-                          id={h.id}
-                          busyId={busyId}
-                          onAct={(mode) => shareHood(h, mode)}
-                        />
+                    {!h.earned && openHoodId === h.id && (
+                      <div className="border-gh-border border-t px-2 py-2">
+                        <div className="mb-1 text-gh-muted text-xs">
+                          Ride the highlighted routes to complete {h.name}:
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {h.routes.map((rt) => {
+                            const done = ridden.has(rt);
+                            return (
+                              <span
+                                key={rt}
+                                className={`rounded px-1.5 py-0.5 text-xs ${
+                                  done
+                                    ? 'bg-gh-subtle text-gh-muted line-through'
+                                    : 'bg-amber-300 font-medium text-gray-900'
+                                }`}
+                              >
+                                {rt}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="text-gh-muted text-xs">{h.remaining} to go</div>
                     )}
                   </div>
                 ))}
