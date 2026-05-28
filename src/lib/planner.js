@@ -25,6 +25,8 @@ import {
   headwayMinutes,
   isReducedService,
   minutesPerFoot,
+  patternRunsAtHour,
+  patternRunsToday,
   runsAtHour,
   runsToday,
 } from './schedule.js';
@@ -89,6 +91,15 @@ function chooseSchedule(scheduleMode, gtfs, now) {
   return runsToday(gtfs, now);
 }
 
+// Per-pattern gate. The route-level chooseSchedule passes when ANY direction
+// runs, so an asymmetric peak express slips a dead-direction pattern through
+// (e.g. 148 NB-only at 3pm would let a SB pattern board with a fake 8-min
+// fallback headway). This restricts to the pattern's own direction.
+function choosePatternSchedule(scheduleMode, gtfs, pattern, now) {
+  if (scheduleMode === 'now') return patternRunsAtHour(gtfs, pattern, now);
+  return patternRunsToday(gtfs, pattern, now);
+}
+
 function isFreeConnector(route, rt, ridden) {
   if (!route) return false;
   if (route.isTrain) return true;
@@ -112,7 +123,16 @@ function* alightsAfter(pattern, boardIdx, maxFt) {
 //
 // `allowFree=false` disables the free-ride expansion (used for the first run
 // of the smoke test or callers that want pure walking).
-function expandReachable({ point, dataset, ridden, scheduleOk, now, stopIndex, allowFree }) {
+function expandReachable({
+  point,
+  dataset,
+  ridden,
+  scheduleOk,
+  patternScheduleOk,
+  now,
+  stopIndex,
+  allowFree,
+}) {
   const { routes, patterns } = dataset;
   const reachable = new Map(); // stopId -> { time, viaFreeLeg, walkFromPoint, finalWalkFeet }
 
@@ -145,6 +165,7 @@ function expandReachable({ point, dataset, ridden, scheduleOk, now, stopIndex, a
       for (const pid of route.patternIds) {
         const p = patterns[pid];
         if (!p) continue;
+        if (patternScheduleOk && !patternScheduleOk.get(pid)) continue;
         const boardIdx = p.stopIdToIdx.get(board.stopId) ?? -1;
         if (boardIdx < 0) continue;
         // Headway is direction-aware (uses p.gtfsDirectionId when set).
@@ -434,10 +455,11 @@ function transferAccess(stop, ridden, currentChain, mySelf, scheduleOk) {
   return score;
 }
 
-function* candidateUnriddenRides(route, boardStopId, patterns) {
+function* candidateUnriddenRides(route, boardStopId, patterns, patternScheduleOk) {
   for (const pid of route.patternIds) {
     const p = patterns[pid];
     if (!p) continue;
+    if (patternScheduleOk && !patternScheduleOk.get(pid)) continue;
     const boardIdx = p.stopIdToIdx.get(boardStopId) ?? -1;
     if (boardIdx < 0) continue;
     for (let alightIdx = boardIdx + 1; alightIdx < p.stops.length; alightIdx++) {
@@ -456,6 +478,7 @@ function runOnePlan({
   roundTrip,
   end,
   scheduleOk,
+  patternScheduleOk,
   now,
   stopIndex,
   allowFree,
@@ -485,6 +508,7 @@ function runOnePlan({
         dataset,
         ridden,
         scheduleOk,
+        patternScheduleOk,
         now,
         stopIndex,
         allowFree,
@@ -508,7 +532,7 @@ function runOnePlan({
         if (!route || route.isTrain) continue;
         if (!scheduleOk.get(rt)) continue;
 
-        for (const ride of candidateUnriddenRides(route, stopId, patterns)) {
+        for (const ride of candidateUnriddenRides(route, stopId, patterns, patternScheduleOk)) {
           const alightStop = ride.pattern.stops[ride.alightIdx];
           const boardStop = ride.pattern.stops[ride.boardIdx];
           const rideFt = Math.max(0, alightStop.pdist - boardStop.pdist);
@@ -624,6 +648,7 @@ function runOnePlan({
       dataset,
       ridden,
       scheduleOk,
+      patternScheduleOk,
       now,
       stopIndex,
     });
@@ -664,6 +689,7 @@ function appendBridgeToEnd({
   dataset,
   ridden,
   scheduleOk,
+  patternScheduleOk,
   now,
   stopIndex,
 }) {
@@ -706,6 +732,7 @@ function appendBridgeToEnd({
         for (const pid of route.patternIds) {
           const p = patterns[pid];
           if (!p) continue;
+          if (patternScheduleOk && !patternScheduleOk.get(pid)) continue;
           const boardIdx = p.stopIdToIdx.get(board.stopId) ?? -1;
           if (boardIdx < 0) continue;
           // Headway is direction-aware (uses p.gtfsDirectionId when set).
@@ -802,6 +829,15 @@ export function planTrips({
   for (const [rt, route] of Object.entries(dataset.routes)) {
     scheduleOk.set(rt, chooseSchedule(scheduleMode, route.gtfs, now));
   }
+  // Per-pattern gate (direction-aware). Built only for routes that pass the
+  // route-level gate; everything else stays out of the map and the loops below
+  // treat missing entries as "not OK".
+  const patternScheduleOk = new Map();
+  for (const [pid, p] of Object.entries(dataset.patterns)) {
+    if (!scheduleOk.get(p.rt)) continue;
+    const gtfs = dataset.routes[p.rt]?.gtfs;
+    patternScheduleOk.set(pid, choosePatternSchedule(scheduleMode, gtfs, p, now));
+  }
 
   function searchOne({ capCount, runs }) {
     const baseline = runOnePlan({
@@ -812,6 +848,7 @@ export function planTrips({
       roundTrip,
       end,
       scheduleOk,
+      patternScheduleOk,
       now,
       stopIndex,
       allowFree,
@@ -830,6 +867,7 @@ export function planTrips({
         roundTrip,
         end,
         scheduleOk,
+        patternScheduleOk,
         now,
         stopIndex,
         allowFree,

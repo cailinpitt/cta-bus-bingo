@@ -62,6 +62,34 @@ export function runsAtHour(gtfs, now) {
   );
 }
 
+function dirRunsAtHour(dir, dayType, hour) {
+  const map = dir?.headways?.[dayType];
+  if (!map) return false;
+  const next = (hour + 1) % 24;
+  return map[String(hour)] != null || map[String(next)] != null;
+}
+
+// Direction-aware "is this pattern running now/today". The route-level
+// runsAtHour/runsToday pass if *any* direction has data, so an asymmetric
+// peak express (e.g. 148 NB-only in PM peak) slips a SB pattern through. When
+// the pattern carries a matched gtfsDirectionId we restrict the check to that
+// direction's headway data. Unknown dirId (trains, older builds) falls back to
+// the route-level check so we don't regress.
+export function patternRunsAtHour(gtfs, pattern, now) {
+  if (!gtfs) return false;
+  const dirId = pattern?.gtfsDirectionId;
+  if (dirId == null || !gtfs[dirId]) return runsAtHour(gtfs, now);
+  return dirRunsAtHour(gtfs[dirId], dayTypeKey(now), now.getHours());
+}
+
+export function patternRunsToday(gtfs, pattern, now) {
+  if (!gtfs) return false;
+  const dirId = pattern?.gtfsDirectionId;
+  if (dirId == null || !gtfs[dirId]) return runsToday(gtfs, now);
+  const map = gtfs[dirId]?.headways?.[dayTypeKey(now)];
+  return !!map && Object.keys(map).length > 0;
+}
+
 // A route is "running reduced service" when this hour's end-to-end duration
 // is dramatically shorter than its peak — the canonical case is the Purple
 // Line operating as the Linden↔Howard shuttle outside express hours, where
@@ -175,6 +203,38 @@ export function frequencyForDay(gtfs, now) {
   }
   out.sort((a, b) => a.hour - b.hour);
   return out;
+}
+
+// Per-direction breakdown of frequencyForDay. Returns one entry per direction
+// present in the gtfs bucket, with a human label pulled from a matching pattern
+// (e.g. "Northbound"). Directions with no service today are still included with
+// an empty freq array so the UI can show "not running today" per direction.
+// `patterns` is optional; without it the label falls back to the dirId.
+export function frequencyByDirection(gtfs, now, patterns = null) {
+  if (!gtfs) return [];
+  const dayType = dayTypeKey(now);
+  // gtfs is keyed by string ('0'/'1'); pattern.gtfsDirectionId is a Number — normalize.
+  const labelByDirId = new Map();
+  if (patterns) {
+    for (const p of Object.values(patterns)) {
+      if (p?.gtfsDirectionId == null || !p.direction) continue;
+      const key = String(p.gtfsDirectionId);
+      if (!labelByDirId.has(key)) labelByDirId.set(key, p.direction);
+    }
+  }
+  const dirIds = Object.keys(gtfs).sort();
+  return dirIds.map((dirId) => {
+    const d = gtfs[dirId];
+    const hw = d?.headways?.[dayType] ?? {};
+    const dur = d?.durations?.[dayType] ?? {};
+    const freq = [];
+    for (const [h, v] of Object.entries(hw)) {
+      if (v == null) continue;
+      freq.push({ hour: +h, headwayMin: v, durationMin: dur[h] ?? null });
+    }
+    freq.sort((a, b) => a.hour - b.hour);
+    return { dirId, label: labelByDirId.get(dirId) ?? null, freq };
+  });
 }
 
 // Per-foot minutes of in-vehicle travel time on this pattern at this hour.

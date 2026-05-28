@@ -796,7 +796,7 @@ export default function App() {
                 ridden={ridden}
                 neighborhoods={dataset.neighborhoods}
               />
-              <ScheduleLookup routes={dataset.routes} />
+              <ScheduleLookup routes={dataset.routes} patterns={dataset.patterns} />
               <RouteOverlayPanel
                 routes={dataset.routes}
                 selected={overlayRoutes}

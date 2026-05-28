@@ -5,11 +5,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   dayTypeKey,
+  frequencyByDirection,
   frequencyForDay,
   headwayMinutes,
   isCtaHoliday,
   isReducedService,
   minutesPerFoot,
+  patternRunsAtHour,
+  patternRunsToday,
   runsAtHour,
   runsToday,
 } from '../lib/schedule.js';
@@ -91,6 +94,83 @@ describe('frequencyForDay', () => {
   it('is empty when the route has no service that day type', () => {
     const weekdayOnly = { 0: { headways: { weekday: { 8: 10 } } } };
     expect(frequencyForDay(weekdayOnly, new Date(2026, 4, 24, 12))).toEqual([]); // a Sunday
+  });
+});
+
+describe('frequencyByDirection', () => {
+  const asymGtfs = {
+    0: { headways: { weekday: { 7: 8, 8: 10 } }, durations: { weekday: { 7: 35 } } },
+    1: { headways: { weekday: { 15: 10, 16: 12 } } },
+  };
+  const wedAfternoon = new Date(2026, 4, 20, 15);
+
+  it('returns one entry per direction with its own sorted freq array', () => {
+    const out = frequencyByDirection(asymGtfs, wedAfternoon);
+    expect(out).toHaveLength(2);
+    expect(out[0].freq.map((f) => f.hour)).toEqual([7, 8]);
+    expect(out[1].freq.map((f) => f.hour)).toEqual([15, 16]);
+    expect(out[0].freq[0].durationMin).toBe(35);
+    expect(out[1].freq[0].durationMin).toBe(null);
+  });
+
+  it('labels directions from matching pattern.direction when patterns are passed', () => {
+    const patterns = {
+      p1: { gtfsDirectionId: 0, direction: 'Southbound' },
+      p2: { gtfsDirectionId: 1, direction: 'Northbound' },
+      p3: { gtfsDirectionId: 0, direction: 'Southbound (Express)' }, // shouldn't override
+    };
+    const out = frequencyByDirection(asymGtfs, wedAfternoon, patterns);
+    expect(out.find((d) => d.dirId === '0').label).toBe('Southbound');
+    expect(out.find((d) => d.dirId === '1').label).toBe('Northbound');
+  });
+
+  it('returns null labels when patterns omit a direction', () => {
+    expect(frequencyByDirection(asymGtfs, wedAfternoon)[0].label).toBe(null);
+  });
+
+  it('includes a direction with no service today as an empty freq array', () => {
+    const sunday = new Date(2026, 4, 24, 12);
+    const out = frequencyByDirection(asymGtfs, sunday);
+    expect(out).toHaveLength(2);
+    expect(out[0].freq).toEqual([]);
+    expect(out[1].freq).toEqual([]);
+  });
+});
+
+describe('pattern-level (direction-aware) running gate', () => {
+  // 148-style asymmetric peak express: NB runs at 15:00, SB does not.
+  const asymGtfs = {
+    0: { headways: { weekday: { 7: 10, 8: 10 } } }, // dir 0 = SB, AM only
+    1: { headways: { weekday: { 15: 10, 16: 10 } } }, // dir 1 = NB, PM only
+  };
+  const pmHour = new Date(2026, 4, 18, 15, 30); // Mon 3:30 PM
+  const sbPattern = { pid: 'sb', gtfsDirectionId: 0 };
+  const nbPattern = { pid: 'nb', gtfsDirectionId: 1 };
+
+  it('route-level runsAtHour passes for either direction (the underlying bug)', () => {
+    expect(runsAtHour(asymGtfs, pmHour)).toBe(true);
+  });
+
+  it('patternRunsAtHour rejects the dead direction', () => {
+    expect(patternRunsAtHour(asymGtfs, sbPattern, pmHour)).toBe(false);
+    expect(patternRunsAtHour(asymGtfs, nbPattern, pmHour)).toBe(true);
+  });
+
+  it('patternRunsAtHour honors the 1-hour lookahead', () => {
+    const justBefore = new Date(2026, 4, 18, 14, 45); // 14:00 has no NB data, 15:00 does
+    expect(patternRunsAtHour(asymGtfs, nbPattern, justBefore)).toBe(true);
+  });
+
+  it('falls back to route-level when the pattern has no gtfsDirectionId', () => {
+    const unknown = { pid: 'x' };
+    expect(patternRunsAtHour(asymGtfs, unknown, pmHour)).toBe(true);
+  });
+
+  it('patternRunsToday is direction-scoped to the day type', () => {
+    const weekdayOnlySB = { 0: { headways: { weekday: { 8: 10 } } } };
+    const sunday = new Date(2026, 4, 24, 12);
+    expect(patternRunsToday(weekdayOnlySB, sbPattern, sunday)).toBe(false);
+    expect(patternRunsToday(weekdayOnlySB, sbPattern, pmHour)).toBe(true);
   });
 });
 
