@@ -132,6 +132,7 @@ function expandReachable({
   now,
   stopIndex,
   allowFree,
+  bannedRoutes,
 }) {
   const { routes, patterns } = dataset;
   const reachable = new Map(); // stopId -> { time, viaFreeLeg, walkFromPoint, finalWalkFeet }
@@ -158,6 +159,7 @@ function expandReachable({
     const walkSec1 = walkSeconds(walkFt1);
 
     for (const rt of board.routes) {
+      if (bannedRoutes?.has(rt)) continue; // a removed route is never even a connector
       const route = routes[rt];
       if (!isFreeConnector(route, rt, ridden)) continue;
       if (!scheduleOk.get(rt)) continue;
@@ -470,6 +472,13 @@ function* candidateUnriddenRides(route, boardStopId, patterns, patternScheduleOk
 
 // One greedy pass producing a single Plan. `noise(0..1)` is an rng used to add
 // score perturbation for multi-trip diversity (pass () => 0 for deterministic).
+//
+// `forcedRoutes` (optional) constrains specific legs to a specific route. It's an
+// array aligned to leg index: a string at position i forces leg i to ride that
+// route (board/alight still chosen optimally); a null/undefined entry leaves the
+// leg to the normal greedy pick. The chain runs max(cap, forcedRoutes.length)
+// legs. This is what powers remove / swap / lock — "keep these buses, re-stitch
+// everything else with the same walk-minimizing machinery."
 function runOnePlan({
   dataset,
   start,
@@ -485,6 +494,8 @@ function runOnePlan({
   reachableCache,
   noise,
   noiseRange,
+  forcedRoutes = null,
+  bannedRoutes = null,
 }) {
   const { routes, patterns, stops } = dataset;
   const chain = [];
@@ -493,8 +504,14 @@ function runOnePlan({
   let position = start;
   let currentStopId = null; // null at trip start; populated after first leg
 
-  for (let leg = 0; leg < cap; leg++) {
-    const isLastLeg = leg === cap - 1;
+  // Routes pinned to a specific leg. Reserved so a greedy (auto) leg never grabs
+  // a route that's forced to appear at its own dedicated step later.
+  const forcedSet = new Set((forcedRoutes ?? []).filter(Boolean));
+  const totalLegs = Math.max(cap, forcedRoutes ? forcedRoutes.length : 0);
+
+  for (let leg = 0; leg < totalLegs; leg++) {
+    const isLastLeg = leg === totalLegs - 1;
+    const forcedRt = forcedRoutes?.[leg] ?? null;
     const mustReturnNear = roundTrip && isLastLeg ? start : null;
     const mustReturnRadius = ROUND_TRIP_FT;
 
@@ -512,6 +529,7 @@ function runOnePlan({
         now,
         stopIndex,
         allowFree,
+        bannedRoutes,
       });
       reachableCache?.set(cacheKey, reachable);
     }
@@ -527,7 +545,16 @@ function runOnePlan({
 
       for (const rt of stop.routes) {
         if (rt === freeRt) continue;
-        if (chainSet.has(rt) || ridden.has(rt)) continue;
+        if (bannedRoutes?.has(rt)) continue; // removed routes can never come back
+        // A forced leg considers only its pinned route (bypassing the
+        // ridden/chain exclusion — the route is a deliberate pick). An auto leg
+        // skips ridden routes, routes already in the chain, and any route held
+        // in reserve for a later forced leg.
+        if (forcedRt) {
+          if (rt !== forcedRt) continue;
+        } else if (chainSet.has(rt) || ridden.has(rt) || forcedSet.has(rt)) {
+          continue;
+        }
         const route = routes[rt];
         if (!route || route.isTrain) continue;
         if (!scheduleOk.get(rt)) continue;
@@ -651,6 +678,7 @@ function runOnePlan({
       patternScheduleOk,
       now,
       stopIndex,
+      bannedRoutes,
     });
   }
 
@@ -692,6 +720,7 @@ function appendBridgeToEnd({
   patternScheduleOk,
   now,
   stopIndex,
+  bannedRoutes,
 }) {
   const { routes, patterns } = dataset;
   const usedRoutes = new Set([...ridden, ...chainSet]);
@@ -723,6 +752,7 @@ function appendBridgeToEnd({
       const walkSec1 = walkSeconds(walkFt1);
 
       for (const rt of board.routes) {
+        if (bannedRoutes?.has(rt)) continue; // never bridge over a removed route
         const route = routes[rt];
         if (!route) continue;
         if (!route.isTrain && !usedRoutes.has(rt)) continue;
@@ -810,6 +840,8 @@ export function planTrips({
   candidateCount = 3,
   searchRuns = 30,
   noise = Math.random,
+  forcedRoutes = null,
+  bannedRoutes = null,
 }) {
   const planKey = (p) =>
     p.legs
@@ -855,6 +887,8 @@ export function planTrips({
       reachableCache,
       noise: () => 0.5,
       noiseRange: 0,
+      forcedRoutes,
+      bannedRoutes,
     });
     const seen = new Map();
     if (baseline.newRouteCount > 0) seen.set(planKey(baseline), baseline);
@@ -874,6 +908,8 @@ export function planTrips({
         reachableCache,
         noise,
         noiseRange: 1.2,
+        forcedRoutes,
+        bannedRoutes,
       });
       if (plan.newRouteCount === 0) continue;
       const key = planKey(plan);
@@ -888,8 +924,14 @@ export function planTrips({
   // wins so runOnePlan doesn't try to satisfy two conflicting end constraints.
   if (end) roundTrip = false;
 
+  // Every leg pinned (remove / swap): the chain is deterministic, so a single
+  // baseline run is the whole answer — no noise search, no length sweep.
+  const fullyForced = !!forcedRoutes && forcedRoutes.length > 0 && forcedRoutes.every(Boolean);
+
   let pool;
-  if (end) {
+  if (fullyForced) {
+    pool = searchOne({ capCount: forcedRoutes.length, runs: 0 });
+  } else if (end) {
     // Cap is a ceiling when a destination is set: search every length 1..cap
     // and pool all candidates. Each runOnePlan appends bridge legs so any
     // chain can potentially "reach" the destination via transit. Partition
@@ -964,6 +1006,83 @@ export function findNearestUnriddenStop({ dataset, point, ridden, scheduleMode, 
     if (!best || d < best.distance) best = { stop: stops[s.stopId], distance: d };
   }
   return best;
+}
+
+// Candidate replacement routes for a single bingo leg, each paired with the
+// re-stitched itinerary it would produce. Powers the "swap" UI: every OTHER
+// bingo leg is pinned, the candidate is forced into the slot, and the two
+// connectors around it are re-solved by the normal walk-minimizing machinery —
+// so only the swapped leg moves. Ranked by total walking, then time.
+export function swapCandidates({
+  dataset,
+  start,
+  end = null,
+  roundTrip = false,
+  ridden,
+  scheduleMode,
+  now = new Date(),
+  stopIndex,
+  plan,
+  legIdx,
+  max = 8,
+  bannedRoutes = null,
+}) {
+  const leg = plan?.legs?.[legIdx];
+  if (!leg || leg.free) return [];
+  // The route being swapped out shouldn't reappear (as a leg or a connector) in
+  // any candidate plan, alongside any externally-banned routes.
+  const banned = new Set([...(bannedRoutes ?? []), leg.rt]);
+  const busLegs = plan.legs.filter((l) => !l.free);
+  const busRoutes = busLegs.map((l) => l.rt);
+  const slot = busLegs.indexOf(leg);
+  if (slot < 0) return [];
+
+  // Where the swapped leg is reached from — the previous bingo leg's alight, or
+  // the trip start for the first leg. Candidates are limited to routes serving a
+  // stop within walking range of that point so the replan count stays small.
+  const fromPoint = slot > 0 ? busLegs[slot - 1].alightStop : start;
+  const { routes } = dataset;
+  const seen = new Set(busRoutes); // never offer a route already in the trip
+  const candidateRts = [];
+  for (const s of stopsNear(stopIndex, fromPoint, MAX_WALK_FT * 1.5)) {
+    for (const rt of s.routes) {
+      if (seen.has(rt) || banned.has(rt)) continue;
+      seen.add(rt);
+      const route = routes[rt];
+      if (!route || route.isTrain) continue;
+      if (!chooseSchedule(scheduleMode, route.gtfs, now)) continue;
+      candidateRts.push(rt);
+    }
+  }
+
+  const results = [];
+  for (const rt of candidateRts) {
+    const forced = busRoutes.slice();
+    forced[slot] = rt;
+    const r = planTrips({
+      dataset,
+      start,
+      end,
+      roundTrip,
+      ridden,
+      cap: forced.length,
+      scheduleMode,
+      now,
+      stopIndex,
+      forcedRoutes: forced,
+      bannedRoutes: banned,
+      candidateCount: 1,
+      searchRuns: 0,
+    });
+    const trip = r.trips[0];
+    // Drop candidates that can't be threaded through (a forced leg with no
+    // feasible board/alight breaks the chain early → fewer bingo legs).
+    if (!trip || trip.newRouteCount < forced.length) continue;
+    const walkFt = trip.legs.reduce((n, l) => n + (l.walkFeet || 0), 0);
+    results.push({ rt, name: routes[rt]?.name, trip, totalSeconds: trip.totalSeconds, walkFt });
+  }
+  results.sort((a, b) => a.walkFt - b.walkFt || a.totalSeconds - b.totalSeconds);
+  return results.slice(0, max);
 }
 
 // Backwards-compatible single-plan API (smoke test uses this).

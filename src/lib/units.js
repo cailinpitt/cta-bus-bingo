@@ -27,6 +27,22 @@ export function fmtMinCompact(seconds) {
   return rem ? `${h}h${rem}m` : `${h}h`;
 }
 
+// The terminus a leg heads toward = its pattern's final stop (the headsign), e.g.
+// "North Avenue Beach". Lets the UI disambiguate "take the 72" into which end of
+// the line to board. Pair with directionOf for the cardinal direction.
+export function terminusOf(leg) {
+  const stops = leg?.pattern?.stops;
+  return stops?.length ? stops[stops.length - 1].stopName : null;
+}
+
+// The cardinal direction of a leg ("Eastbound"), or null. Only the four compass
+// directions read meaningfully to a rider; trains carry synthetic
+// "Forward"/"Reverse" labels, which we drop so trains show only their terminus.
+export function directionOf(leg) {
+  const direction = leg?.pattern?.direction || null;
+  return direction && /bound$/i.test(direction) ? direction : null;
+}
+
 // Format a ride distance (input feet from the pattern's pdist field).
 export function fmtRideDistance(feet) {
   if (feet < 1000) return `${Math.round(feet / 10) * 10} ft`;

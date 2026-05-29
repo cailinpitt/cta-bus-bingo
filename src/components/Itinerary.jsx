@@ -1,7 +1,7 @@
 // Per-leg list with times. Colors must match TripMap's palette.
 import { useEffect, useState } from 'react';
 import { itineraryToText, shareText } from '../lib/shareItinerary.js';
-import { fmtMin, fmtWalkDistance } from '../lib/units.js';
+import { directionOf, fmtMin, fmtWalkDistance, terminusOf } from '../lib/units.js';
 import { colorForLeg } from './TripMap.jsx';
 
 export default function Itinerary({
@@ -13,6 +13,14 @@ export default function Itinerary({
   start,
   end,
   onStartRiding,
+  onRemoveLeg,
+  onRequestSwap,
+  onApplySwap,
+  onCancelSwap,
+  swapState,
+  editError,
+  lockedRoutes,
+  onToggleLock,
 }) {
   // Undo target — snapshot of the ridden set immediately *before* the most
   // recent mark action. Cleared on any subsequent plan change (parent unmounts
@@ -63,6 +71,10 @@ export default function Itinerary({
       </div>
     );
   }
+  // Bingo (non-free) legs are the ones the rider can remove / swap / lock; never
+  // let the last one be removed (that would empty the trip).
+  const bingoCount = plan.legs.filter((l) => !l.free).length;
+  const canEdit = !!(onRemoveLeg || onRequestSwap || onToggleLock);
   return (
     <div className="rounded-lg border border-gh-border bg-gh-surface p-3 text-sm">
       <div className="mb-2 flex items-center justify-between text-xs">
@@ -139,6 +151,11 @@ export default function Itinerary({
           Couldn't loop back near your start — this is the closest round trip we could build.
         </div>
       )}
+      {editError && (
+        <div className="mb-2 rounded border border-amber-700/50 bg-amber-900/30 light:border-amber-300 light:bg-amber-50 px-2 py-1 text-amber-200 light:text-amber-800 text-xs">
+          {editError}
+        </div>
+      )}
       {onStartRiding && (
         <button
           type="button"
@@ -154,6 +171,11 @@ export default function Itinerary({
         {plan.legs.map((l, i) => {
           const color = colorForLeg(l, i, routes);
           const isLast = i === plan.legs.length - 1;
+          const terminus = terminusOf(l);
+          const direction = directionOf(l);
+          const isBingo = !l.free;
+          const locked = !!lockedRoutes?.has(l.rt);
+          const swapOpen = swapState?.legIdx === i;
           return (
             <li key={`${i}-${l.rt}-${l.boardStop.stopId}`} className="flex gap-3">
               {/* Left rail: step number + connecting path/arrow to the next leg. */}
@@ -184,14 +206,71 @@ export default function Itinerary({
                 )}
               </div>
               <div className="flex-1 pb-3">
-                <div className="font-medium text-gh-fg">
-                  {l.free && (
-                    <span className="mr-1 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gh-muted">
-                      {routes?.[l.rt]?.isTrain ? 'train' : 'ridden'}
-                    </span>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 font-medium text-gh-fg">
+                    {l.free && (
+                      <span className="mr-1 rounded bg-gh-subtle px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gh-muted">
+                        {routes?.[l.rt]?.isTrain ? 'train' : 'ridden'}
+                      </span>
+                    )}
+                    {routes?.[l.rt]?.isTrain ? null : l.rt}{' '}
+                    <span className="text-gh-muted font-normal">{l.routeName}</span>
+                    {locked && <span className="ml-1 text-[11px]">🔒</span>}
+                    {terminus && (
+                      <span className="block truncate font-normal text-gh-muted text-xs">
+                        → {terminus}
+                      </span>
+                    )}
+                    {direction && (
+                      <span className="block font-normal text-[11px] text-gh-muted/80">
+                        {direction}
+                      </span>
+                    )}
+                  </div>
+                  {canEdit && isBingo && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {onToggleLock && (
+                        <button
+                          type="button"
+                          onClick={() => onToggleLock(l.rt)}
+                          title={
+                            locked
+                              ? 'Unlock — allow re-planning to change this'
+                              : 'Lock this bus so re-planning keeps it'
+                          }
+                          aria-pressed={locked}
+                          className={`rounded px-1.5 py-0.5 text-[11px] ${locked ? 'bg-amber-600 text-white' : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'}`}
+                        >
+                          {locked ? '🔒' : '🔓'}
+                        </button>
+                      )}
+                      {onRequestSwap && (
+                        <button
+                          type="button"
+                          onClick={() => (swapOpen ? onCancelSwap?.() : onRequestSwap(i))}
+                          title="Swap this bus for a different route"
+                          className={`rounded px-1.5 py-0.5 text-[11px] ${swapOpen ? 'bg-blue-600 text-white' : 'bg-gh-subtle text-gh-muted hover:text-gh-fg'}`}
+                        >
+                          ⇄ Swap
+                        </button>
+                      )}
+                      {onRemoveLeg && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveLeg(i)}
+                          disabled={bingoCount <= 1}
+                          title={
+                            bingoCount <= 1
+                              ? 'Can’t remove the only bus'
+                              : 'Remove this bus and close the gap'
+                          }
+                          className="rounded bg-gh-subtle px-1.5 py-0.5 text-[11px] text-gh-muted hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 light:hover:text-red-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   )}
-                  {routes?.[l.rt]?.isTrain ? null : l.rt}{' '}
-                  <span className="text-gh-muted font-normal">{l.routeName}</span>
                 </div>
                 <div className="text-gh-muted text-xs">
                   {l.walkFeet > 50 && (
@@ -208,6 +287,50 @@ export default function Itinerary({
                   ride {fmtMin(l.rideSeconds)} to{' '}
                   <span className="text-gh-fg/80">{l.alightStop.stopName}</span>.
                 </div>
+
+                {/* Swap candidate picker, opened for this leg. */}
+                {swapOpen && (
+                  <div className="mt-2 rounded border border-blue-700/50 bg-blue-950/30 light:border-blue-300 light:bg-blue-50 p-2">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-gh-muted text-[11px] uppercase tracking-wide">
+                        Swap {l.rt} for
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onCancelSwap?.()}
+                        className="text-gh-muted text-[11px] hover:text-gh-fg"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {swapState.loading ? (
+                      <div className="py-1 text-gh-muted text-xs">Finding routes that fit…</div>
+                    ) : swapState.candidates?.length ? (
+                      <div className="flex flex-col gap-1">
+                        {swapState.candidates.map((c) => (
+                          <button
+                            type="button"
+                            key={c.rt}
+                            onClick={() => onApplySwap?.(c)}
+                            className="flex items-center justify-between gap-2 rounded bg-gh-surface px-2 py-1.5 text-left hover:bg-gh-border"
+                          >
+                            <span className="min-w-0 truncate">
+                              <span className="font-semibold text-gh-fg">{c.rt}</span>{' '}
+                              <span className="text-gh-muted text-xs">{c.name}</span>
+                            </span>
+                            <span className="shrink-0 text-gh-muted text-[11px]">
+                              {fmtMin(c.totalSeconds)} · walk {fmtWalkDistance(c.walkFt)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-1 text-gh-muted text-xs">
+                        No other route fits cleanly between these stops.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </li>
           );

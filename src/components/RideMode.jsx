@@ -2,11 +2,26 @@
 // you arrive. Pairs with the map (zoomed to the current leg). Persists via the
 // plan snapshot so a reload / PWA-relaunch drops you back on the same step.
 
+import { haversineFeet } from '../lib/geo.js';
 import { headwayMinutes } from '../lib/schedule.js';
-import { fmtMin, fmtWalkDistance } from '../lib/units.js';
+import { directionOf, fmtMin, fmtWalkDistance, terminusOf } from '../lib/units.js';
 import { colorForLeg } from './TripMap.jsx';
 
-export default function RideMode({ plan, routes, legIdx, onPrev, onNext, onExit }) {
+// Within this distance of the alight stop, prompt the rider to get ready. ~2
+// city blocks at CTA spacing — enough warning to pull the cord.
+const GET_OFF_SOON_FT = 1200;
+const AT_STOP_FT = 350;
+
+export default function RideMode({
+  plan,
+  routes,
+  legIdx,
+  onPrev,
+  onNext,
+  onExit,
+  me = null,
+  locationDenied = false,
+}) {
   if (!plan?.legs?.length) return null;
   const total = plan.legs.length;
   const idx = Math.max(0, Math.min(legIdx ?? 0, total - 1));
@@ -18,8 +33,15 @@ export default function RideMode({ plan, routes, legIdx, onPrev, onNext, onExit 
   const routeLabel = isTrain
     ? route?.name || leg.rt
     : `${leg.rt}${route?.name ? ` ${route.name}` : ''}`;
+  const terminus = terminusOf(leg);
+  const direction = directionOf(leg);
   const headway =
     !leg.free && route?.gtfs ? headwayMinutes(route.gtfs, leg.pattern, new Date()) : null;
+
+  // Live distance to the get-off stop, when a GPS fix is available.
+  const distToStop = me ? haversineFeet(me, leg.alightStop) : null;
+  const atStop = distToStop != null && distToStop <= AT_STOP_FT;
+  const getOffSoon = distToStop != null && distToStop <= GET_OFF_SOON_FT;
 
   const isFirst = idx === 0;
   const isLast = idx === total - 1;
@@ -50,6 +72,8 @@ export default function RideMode({ plan, routes, legIdx, onPrev, onNext, onExit 
         </div>
         <div className="min-w-0">
           <div className="font-bold text-gh-fg text-xl leading-tight">{routeLabel}</div>
+          {terminus && <div className="truncate text-gh-muted text-sm">→ {terminus}</div>}
+          {direction && <div className="text-gh-muted/80 text-xs">{direction}</div>}
           {leg.free && (
             <div className="text-gh-muted text-[11px] uppercase tracking-wide">
               {isTrain ? 'train connector' : 'ridden connector'}
@@ -88,6 +112,28 @@ export default function RideMode({ plan, routes, legIdx, onPrev, onNext, onExit 
           </div>
         )}
       </div>
+
+      {/* Live distance to the get-off stop. Turns into a loud prompt as you
+          approach so you know when to pull the cord. */}
+      {distToStop == null && locationDenied && (
+        <div className="mb-3 rounded bg-gh-canvas px-3 py-2 text-center text-gh-muted text-xs">
+          Enable location to see your stop approaching.
+        </div>
+      )}
+      {distToStop != null &&
+        (atStop ? (
+          <div className="mb-3 rounded bg-rose-600 px-3 py-2 text-center font-bold text-white">
+            🛑 You're at {leg.alightStop.stopName} — get off!
+          </div>
+        ) : getOffSoon ? (
+          <div className="mb-3 rounded bg-amber-500 px-3 py-2 text-center font-semibold text-black">
+            🔔 Get off soon — {fmtWalkDistance(distToStop)} to your stop
+          </div>
+        ) : (
+          <div className="mb-3 rounded bg-gh-canvas px-3 py-2 text-center text-gh-muted text-sm">
+            📍 {fmtWalkDistance(distToStop)} to your stop
+          </div>
+        ))}
 
       <div className="flex items-center gap-2">
         <button

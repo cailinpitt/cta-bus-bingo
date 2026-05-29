@@ -11,10 +11,11 @@ import StartPicker from './components/StartPicker.jsx';
 import SyncPanel from './components/SyncPanel.jsx';
 import TripMap, { OVERLAY_PALETTE } from './components/TripMap.jsx';
 import TripPicker from './components/TripPicker.jsx';
+import { useGeolocation } from './hooks/useGeolocation.js';
 import { useTheme } from './hooks/useTheme.js';
 import { leastCoveredArea } from './lib/coverage.js';
 import { loadDataset } from './lib/data.js';
-import { augmentStopsForPlanning, planTrips } from './lib/planner.js';
+import { augmentStopsForPlanning, planTrips, swapCandidates } from './lib/planner.js';
 import { rehydratePlan, serializePlan } from './lib/planSnapshot.js';
 import { buildStopIndex } from './lib/spatial.js';
 import {
@@ -149,6 +150,15 @@ export default function App() {
   // not riding. Persisted in the plan snapshot so a reload returns to the same step.
   const [ridingLegIdx, setRidingLegIdx] = useState(null);
   const [busy, setBusy] = useState(false);
+  // In-place itinerary editing: routes the user has locked (re-planning keeps
+  // them), the open swap picker, and a transient error when an edit can't be
+  // stitched together.
+  const [lockedRoutes, setLockedRoutes] = useState(() => new Set());
+  const [swapState, setSwapState] = useState(null); // { legIdx, loading, candidates } | null
+  const [editError, setEditError] = useState(null);
+  // Live device location while riding — drives the map "you are here" dot and the
+  // get-off-soon prompt. Only watched in ride mode.
+  const { coords: liveLocation, denied: locationDenied } = useGeolocation(ridingLegIdx != null);
   // Which picker is requesting map clicks: 'start' | 'end' | null.
   const [mapClickTarget, setMapClickTarget] = useState(null);
   // Collapse the trip-setup section to give the map and itinerary more room.
@@ -282,6 +292,10 @@ export default function App() {
   function handlePickStart(p) {
     setStart(p);
     setMapClickTarget(null);
+    // A new starting point is a new trip context — drop any locks/swap UI.
+    setLockedRoutes(new Set());
+    setSwapState(null);
+    setEditError(null);
   }
 
   function handlePickEnd(p) {
@@ -338,10 +352,26 @@ export default function App() {
   // against a freshly chosen point without waiting for setState to flush.
   // `randomTrip` selects a random candidate instead of the top-ranked one — the
   // "surprise" in Surprise me.
-  function planFromStart(startPt, { randomTrip = false, endOverride } = {}) {
+  // 'later' = an explicit future timestamp; under the hood the planner still
+  // uses the runsAtHour ('now') schedule check, just against that future moment
+  // instead of wall-clock now. Shared by full planning and in-place edits.
+  function computeSchedule() {
+    const futureDate = scheduleMode === 'later' && scheduleAt ? new Date(scheduleAt) : null;
+    const effectiveNow =
+      futureDate && !Number.isNaN(futureDate.getTime()) ? futureDate : new Date();
+    const effectiveMode = scheduleMode === 'later' ? 'now' : scheduleMode;
+    return { effectiveMode, effectiveNow };
+  }
+
+  function planFromStart(
+    startPt,
+    { randomTrip = false, endOverride, forcedRoutes = null, capOverride = null } = {},
+  ) {
     if (!dataset || !startPt) return;
     const endPt = endOverride !== undefined ? endOverride : end;
     setBusy(true);
+    setEditError(null);
+    setSwapState(null);
     // Starting a new plan resets ride mode (the legs are about to change) and
     // exits compare-routes mode (mutually exclusive views).
     setRidingLegIdx(null);
@@ -352,35 +382,168 @@ export default function App() {
     // frame in React 18 batching and the spinner never appears.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        // 'later' = an explicit future timestamp; under the hood the planner
-        // still uses the runsAtHour ('now') schedule check, just against that
-        // future moment instead of wall-clock now.
-        const futureDate = scheduleMode === 'later' && scheduleAt ? new Date(scheduleAt) : null;
-        const effectiveNow =
-          futureDate && !Number.isNaN(futureDate.getTime()) ? futureDate : new Date();
-        const effectiveMode = scheduleMode === 'later' ? 'now' : scheduleMode;
+        const { effectiveMode, effectiveNow } = computeSchedule();
         const r = planTrips({
           dataset,
           start: { lat: startPt.lat, lon: startPt.lon },
           end: endPt ? { lat: endPt.lat, lon: endPt.lon } : null,
           ridden,
-          cap,
+          cap: capOverride ?? cap,
           roundTrip,
           scheduleMode: effectiveMode,
           now: effectiveNow,
           stopIndex: stopIndexRef.current,
+          forcedRoutes,
         });
         setResult(r);
         setSelectedTrip(
           randomTrip && r.trips.length > 0 ? Math.floor(Math.random() * r.trips.length) : 0,
         );
+        // Drop locks that no longer correspond to any suggested route.
+        pruneLocksTo(r.trips[0]);
         setBusy(false);
       });
     });
   }
 
+  // Keep `lockedRoutes` limited to routes that still appear in a (re)planned
+  // trip, so a stale lock can't silently force a route the user can no longer see.
+  function pruneLocksTo(trip) {
+    setLockedRoutes((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set((trip?.legs ?? []).filter((l) => !l.free).map((l) => l.rt));
+      const next = new Set([...prev].filter((rt) => present.has(rt)));
+      return next.size === prev.size ? prev : next;
+    });
+  }
+
+  // --- In-place itinerary editing (remove / swap / lock) ---------------------
+
+  // Recompute the selected trip with a fully-pinned route list and swap it into
+  // place (other candidate options are left untouched). Returns nothing; sets an
+  // error banner if the forced routes can't be stitched together.
+  function applyForcedToSelected(forcedRoutes, { banned = null } = {}) {
+    if (!forcedRoutes.length) return;
+    const planStart = result?.start ?? start;
+    if (!dataset || !planStart) return;
+    setEditError(null);
+    setBusy(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const { effectiveMode, effectiveNow } = computeSchedule();
+        const common = {
+          dataset,
+          start: { lat: planStart.lat, lon: planStart.lon },
+          end: end ? { lat: end.lat, lon: end.lon } : null,
+          ridden,
+          roundTrip,
+          scheduleMode: effectiveMode,
+          now: effectiveNow,
+          stopIndex: stopIndexRef.current,
+          bannedRoutes: banned,
+        };
+        // Prefer keeping the other buses exactly (forced), re-stitching the gap.
+        let trip = planTrips({ ...common, cap: forcedRoutes.length, forcedRoutes }).trips[0];
+        // If the kept routes can't reconnect at all, fall back to a fresh plan
+        // that simply excludes the banned route — the removed bus is gone either
+        // way, and the rider still gets a usable trip instead of the stale one.
+        if (!trip || trip.newRouteCount === 0) {
+          trip = planTrips({ ...common, cap: forcedRoutes.length }).trips[0] ?? trip;
+        }
+        if (!trip) {
+          setEditError("Couldn't build a trip without that route.");
+          setBusy(false);
+          return;
+        }
+        setResult((prev) => {
+          if (!prev) return prev;
+          const trips = prev.trips.slice();
+          trips[selectedTrip] = { ...trip };
+          return { ...prev, trips };
+        });
+        pruneLocksTo(trip);
+        setSwapState(null);
+        setBusy(false);
+      });
+    });
+  }
+
+  function handleRemoveLeg(legIdx) {
+    if (!currentPlan) return;
+    const busLegs = currentPlan.legs.filter((l) => !l.free);
+    const target = currentPlan.legs[legIdx];
+    if (!target || target.free) return;
+    const removedRt = target.rt;
+    // Drop EVERY leg of that route (so a route the trip used twice is fully
+    // gone) and ban it from the recompute so it can't return as a leg, a
+    // connector, or a bridge hop.
+    const forced = busLegs.map((l) => l.rt).filter((rt) => rt !== removedRt);
+    if (forced.length === 0) return; // can't empty the trip
+    applyForcedToSelected(forced, { banned: new Set([removedRt]) });
+  }
+
+  function handleRequestSwap(legIdx) {
+    if (!currentPlan || !dataset) return;
+    const planStart = result?.start ?? start;
+    if (!planStart) return;
+    setEditError(null);
+    setSwapState({ legIdx, loading: true, candidates: null });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const { effectiveMode, effectiveNow } = computeSchedule();
+        const candidates = swapCandidates({
+          dataset,
+          start: { lat: planStart.lat, lon: planStart.lon },
+          end: end ? { lat: end.lat, lon: end.lon } : null,
+          roundTrip,
+          ridden,
+          scheduleMode: effectiveMode,
+          now: effectiveNow,
+          stopIndex: stopIndexRef.current,
+          plan: currentPlan,
+          legIdx,
+          max: 6,
+        });
+        setSwapState((s) => (s?.legIdx === legIdx ? { legIdx, loading: false, candidates } : s));
+      });
+    });
+  }
+
+  function handleApplySwap(candidate) {
+    if (!candidate?.trip) return;
+    setResult((prev) => {
+      if (!prev) return prev;
+      const trips = prev.trips.slice();
+      trips[selectedTrip] = { ...candidate.trip };
+      return { ...prev, trips };
+    });
+    pruneLocksTo(candidate.trip);
+    setSwapState(null);
+  }
+
+  function handleCancelSwap() {
+    setSwapState(null);
+  }
+
+  function toggleLock(rt) {
+    setLockedRoutes((prev) => {
+      const next = new Set(prev);
+      if (next.has(rt)) next.delete(rt);
+      else next.add(rt);
+      return next;
+    });
+  }
+
   function handlePlan() {
     if (!start) return;
+    // When the user has locked one or more buses on the current plan, a re-plan
+    // keeps those exact routes (in place) and re-rolls only the unlocked legs.
+    const bingoLegs = currentPlan?.legs?.filter((l) => !l.free) ?? [];
+    if (lockedRoutes.size > 0 && bingoLegs.length > 0) {
+      const forced = bingoLegs.map((l) => (lockedRoutes.has(l.rt) ? l.rt : null));
+      planFromStart(start, { forcedRoutes: forced, capOverride: Math.max(cap, forced.length) });
+      return;
+    }
     planFromStart(start);
   }
 
@@ -393,6 +556,7 @@ export default function App() {
     if (!dataset || !start) return;
     setEnd(null);
     setRoundTripState(false);
+    setLockedRoutes(new Set());
     planFromStart(start, { randomTrip: true });
   }
 
@@ -406,6 +570,9 @@ export default function App() {
     setStart(null);
     setEnd(null);
     setRoundTripState(false);
+    setLockedRoutes(new Set());
+    setSwapState(null);
+    setEditError(null);
     saveLastPlan(null);
   }
 
@@ -436,6 +603,7 @@ export default function App() {
     };
     setEnd(endPt);
     setRoundTripState(false);
+    setLockedRoutes(new Set());
     planFromStart(start, { endOverride: endPt });
   }
 
@@ -625,6 +793,7 @@ export default function App() {
               overlay={overlay}
               dark={dark}
               focusLegIdx={ridingLegIdx}
+              me={ridingLegIdx != null ? liveLocation : null}
             />
             {/* Mobile-only: collapse the map to free the screen for the list. */}
             <button
@@ -661,6 +830,8 @@ export default function App() {
               onPrev={prevLeg}
               onNext={nextLeg}
               onExit={exitRiding}
+              me={liveLocation}
+              locationDenied={locationDenied}
             />
           )}
           {ready && ridingLegIdx == null && (
@@ -775,6 +946,14 @@ export default function App() {
                 start={start}
                 end={end}
                 onStartRiding={currentPlan?.legs?.length ? startRiding : undefined}
+                onRemoveLeg={handleRemoveLeg}
+                onRequestSwap={handleRequestSwap}
+                onApplySwap={handleApplySwap}
+                onCancelSwap={handleCancelSwap}
+                swapState={swapState}
+                editError={editError}
+                lockedRoutes={lockedRoutes}
+                onToggleLock={toggleLock}
                 onUseSuggestion={(sug) => {
                   setStart({
                     lat: sug.stop.lat,

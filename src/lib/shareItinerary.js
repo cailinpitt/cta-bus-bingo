@@ -2,7 +2,7 @@
 // "Share" copies the URL; this one copies the actual steps so people can paste
 // the trip into a message and still tap the link to open the live plan.
 
-import { fmtMin, fmtWalkDistance } from './units.js';
+import { directionOf, fmtMin, fmtWalkDistance, terminusOf } from './units.js';
 
 // Multi-line numbered itinerary. Mirrors the on-screen timeline so the shared
 // text reads the same as what the user sees.
@@ -22,7 +22,10 @@ export function itineraryToText(plan, routes, { start, end } = {}) {
     const routeName = route?.name || '';
     const head = isTrain ? routeName || l.rt : `${l.rt}${routeName ? ` ${routeName}` : ''}`;
     const tag = l.free ? (isTrain ? ' [train connector]' : ' [ridden connector]') : '';
-    lines.push(`${i + 1}. ${head}${tag}`);
+    const terminus = terminusOf(l);
+    const direction = directionOf(l);
+    const dest = terminus ? `${terminus}${direction ? ` (${direction})` : ''}` : '';
+    lines.push(`${i + 1}. ${head}${dest ? ` → ${dest}` : ''}${tag}`);
     if (l.walkFeet > 50) {
       const walkMin = Math.round(l.walkSeconds / 60);
       lines.push(

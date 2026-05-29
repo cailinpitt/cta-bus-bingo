@@ -178,6 +178,15 @@ function startGeoJSON(start) {
   };
 }
 
+// Reuse the single-point shape for the live "you are here" dot.
+const pointGeoJSON = (p) =>
+  p
+    ? {
+        type: 'FeatureCollection',
+        features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] } }],
+      }
+    : { type: 'FeatureCollection', features: [] };
+
 export default function TripMap({
   plan,
   routes,
@@ -189,6 +198,7 @@ export default function TripMap({
   overlay,
   dark = true,
   focusLegIdx = null,
+  me = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -271,6 +281,11 @@ export default function TripMap({
         data: { type: 'FeatureCollection', features: [] },
       });
       map.addSource('endpt', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      // Live device location ("you are here") — only populated in ride mode.
+      map.addSource('me', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
@@ -378,6 +393,33 @@ export default function TripMap({
           'circle-color': '#ef4444',
           'circle-stroke-color': '#fff',
           'circle-stroke-width': 2,
+        },
+      });
+      // Live location: a soft blue halo + a solid blue dot (the familiar
+      // "you are here" marker), drawn above everything so it's never hidden
+      // behind a leg polyline while you're riding.
+      map.addLayer({
+        id: 'me-halo',
+        type: 'circle',
+        source: 'me',
+        paint: {
+          'circle-radius': 16,
+          'circle-color': '#3b82f6',
+          'circle-opacity': 0.2,
+          'circle-stroke-color': '#3b82f6',
+          'circle-stroke-width': 1,
+          'circle-stroke-opacity': 0.4,
+        },
+      });
+      map.addLayer({
+        id: 'me-dot',
+        type: 'circle',
+        source: 'me',
+        paint: {
+          'circle-radius': 7,
+          'circle-color': '#3b82f6',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
         },
       });
 
@@ -534,6 +576,17 @@ export default function TripMap({
     if (map.getSource('legs')) apply();
     else map.once('load', apply);
   }, [plan, start, end, routes, heatmap, overlay, focusLegIdx]);
+
+  // Live-location updates on their own effect so a moving GPS dot never triggers
+  // the bounds-fitting in the main sync effect (which would make the map jump on
+  // every position update while you ride).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => map.getSource('me')?.setData(pointGeoJSON(me));
+    if (map.getSource('me')) apply();
+    else map.once('load', apply);
+  }, [me]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
