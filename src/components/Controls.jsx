@@ -26,17 +26,35 @@ export default function Controls({
     <div className="rounded-lg border border-gh-border bg-gh-surface p-3 text-sm">
       <div className="mb-2 text-gh-muted text-xs uppercase tracking-wide">Trip</div>
 
-      <label className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2">
         <span className="text-gh-muted">Max new routes</span>
-        <input
-          type="number"
-          min={1}
-          max={10}
-          value={cap}
-          onChange={(e) => setCap(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
-          className="w-16 rounded border border-gh-border bg-gh-canvas px-2 py-1 text-gh-fg"
-        />
-      </label>
+        <div className="inline-flex items-stretch overflow-hidden rounded border border-gh-border">
+          <button
+            type="button"
+            onClick={() => setCap(Math.max(1, cap - 1))}
+            disabled={cap <= 1}
+            aria-label="Decrease max new routes"
+            className="flex h-9 w-9 items-center justify-center bg-gh-canvas text-gh-fg text-lg leading-none hover:bg-gh-subtle disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            −
+          </button>
+          <span
+            className="flex h-9 w-10 items-center justify-center border-gh-border border-x bg-gh-canvas text-gh-fg tabular-nums"
+            aria-live="polite"
+          >
+            {cap}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCap(Math.min(10, cap + 1))}
+            disabled={cap >= 10}
+            aria-label="Increase max new routes"
+            className="flex h-9 w-9 items-center justify-center bg-gh-canvas text-gh-fg text-lg leading-none hover:bg-gh-subtle disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            +
+          </button>
+        </div>
+      </div>
 
       <label
         className={`mb-2 flex items-center gap-2 ${roundTripDisabled ? 'opacity-50' : ''}`}
